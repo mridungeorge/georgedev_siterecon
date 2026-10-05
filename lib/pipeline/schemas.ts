@@ -24,6 +24,15 @@ export const FindingSchema = z.object({
 
 export const CouldntCheckSchema = z.object({ what: z.string(), why: z.string() });
 
+/** A marketing idea. It must point at a finding that really exists in the same report. */
+export const IdeaSchema = z.object({
+  title: z.string(),
+  why: z.string(),
+  findingId: z.string(),
+  effort: EffortSchema,
+});
+export type Idea = z.infer<typeof IdeaSchema>;
+
 export const ModuleResultSchema = z.object({
   module: ModuleNameSchema,
   status: z.enum(["ok", "partial", "failed"]),
