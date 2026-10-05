@@ -19,8 +19,9 @@ export function GET(req: Request) {
   const pagespeed: PageSpeedDeps = {
     apiKey: process.env.PAGESPEED_API_KEY,
     quotaOk: () => tryConsumeQuota(db, "pagespeed"),
-    fetchJson: async (url) => {
-      const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+    fetchJson: async (url, signal) => {
+      const timeout = AbortSignal.timeout(60_000);
+      const res = await fetch(url, { signal: signal ? AbortSignal.any([timeout, signal]) : timeout });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },

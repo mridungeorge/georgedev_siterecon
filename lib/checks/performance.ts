@@ -8,7 +8,8 @@ export interface PageSpeedDeps {
   apiKey: string | undefined;
   /** Uses one unit of the daily PageSpeed budget. False means it is spent. */
   quotaOk: () => boolean;
-  fetchJson: (url: string) => Promise<unknown>;
+  /** The signal ends the request early when the visitor leaves or the step runs out of time. */
+  fetchJson: (url: string, signal?: AbortSignal) => Promise<unknown>;
 }
 
 export interface PerformanceResult {
@@ -22,7 +23,7 @@ function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export async function runPerformanceChecks(url: string, deps: PageSpeedDeps): Promise<PerformanceResult> {
+export async function runPerformanceChecks(url: string, deps: PageSpeedDeps, signal?: AbortSignal): Promise<PerformanceResult> {
   const unavailable = (why: string): PerformanceResult => ({ outcomes: [], couldntCheck: [{ what: SOURCE, why }] });
 
   if (!deps.apiKey) return unavailable("no PageSpeed API key is configured");
@@ -33,6 +34,7 @@ export async function runPerformanceChecks(url: string, deps: PageSpeedDeps): Pr
     const target = new URL(url).toString();
     data = await deps.fetchJson(
       `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(target)}&strategy=mobile&category=performance&key=${encodeURIComponent(deps.apiKey)}`,
+      signal,
     );
   } catch (err) {
     return unavailable(`the request failed (${err instanceof Error ? err.message : "unknown error"})`);

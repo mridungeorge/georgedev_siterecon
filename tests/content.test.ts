@@ -18,7 +18,10 @@ const BARE = `<html><body><div>Welcome</div></body></html>`;
 
 type Item = { id: string; passed: boolean; severity?: string; detail?: string; fix?: string; quote?: string };
 const answer = (items: Item[]): LlmClient => async () => ({ content: JSON.stringify({ items }), provider: "nim", model: "m" });
-const allPass: Item[] = ["value-prop", "audience", "cta-clarity", "differentiation"].map((id) => ({ id, passed: true }));
+// A pass only counts when it quotes something that is really on the page.
+const allPass: Item[] = ["value-prop", "audience", "cta-clarity", "differentiation"].map((id) => ({
+  id, passed: true, quote: "Acme Storage designs shelving that fits awkward spaces",
+}));
 const failed = (r: Awaited<ReturnType<typeof runContentChecks>>) => r.outcomes.filter((o) => !o.passed).map((o) => o.id);
 
 describe("runContentChecks", () => {
@@ -44,7 +47,8 @@ describe("runContentChecks", () => {
     ]));
     const finding = r.outcomes.find((o) => o.id === "value-prop")!.finding!;
     expect(finding.id).toBe("content:value-prop");
-    expect(finding.severity).toBe("high");
+    // The model's "high" is capped: it can say there is a problem, not how serious it is.
+    expect(finding.severity).toBe("medium");
     expect(finding.evidence[0].quote).toBe(quote);
   });
 

@@ -21,6 +21,9 @@ export function countInjectionAttempts(text: string): number {
 
 /** Truncates page text and fences it. Marker text inside the page is removed so it cannot close the fence early. */
 export function wrapUntrusted(text: string, maxChars = 6000): string {
-  const clean = text.split(UNTRUSTED_OPEN).join("").split(UNTRUSTED_CLOSE).join("").slice(0, maxChars);
+  // Both markers start or end with three angle brackets, so no run of three or more can survive
+  // in the page text. Removing one marker could otherwise splice the pieces around it back
+  // into a new marker (an attacker writes the marker with another marker inside it).
+  const clean = text.replace(/<{3,}|>{3,}/g, " ").slice(0, maxChars);
   return `${UNTRUSTED_OPEN}\n${clean}\n${UNTRUSTED_CLOSE}`;
 }

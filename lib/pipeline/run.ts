@@ -29,6 +29,10 @@ export interface RunDeps {
   llm?: LlmClient | null;
   /** Null or missing means performance is reported as could not check. */
   pagespeed?: PageSpeedDeps | null;
+  /** Ends the scan early (the visitor left, or the scan ran out of time). */
+  signal?: AbortSignal;
+  /** Most time, in ms, each outside-service step may take. Keeps a slow provider from using up the scan. */
+  stepBudgets?: { content?: number; performance?: number; ideas?: number };
   /** Lets tests replace a module. Production uses the real checks. */
   modules?: Partial<Record<CheckModule, (s: SiteSnapshot) => CheckOutcome[]>>;
 }
@@ -53,6 +57,11 @@ function siteSummary(s: SiteSnapshot): string {
 export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   const { fetchPage, emit } = deps;
   const llm = deps.llm ?? null;
+  const throwIfCancelled = () => {
+    if (deps.signal?.aborted) throw new Error("The scan was cancelled.");
+  };
+  // Worst case adds up to under the 6-minute ceiling: fetch about 150 s, then 75 + 60 + 45 s.
+  const budget = (ms: number) => (deps.signal ? AbortSignal.any([deps.signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
   const checks: Record<CheckModule, (s: SiteSnapshot) => CheckOutcome[]> = {
     technical: deps.modules?.technical ?? runTechnicalChecks,
     geo: deps.modules?.geo ?? runGeoChecks,
@@ -78,6 +87,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     (result.couldntCheck.length ? `, ${result.couldntCheck.length} could not be checked` : "");
 
   for (const name of ["technical", "geo"] as const) {
+    throwIfCancelled();
     emit({ event: "step-start", data: { step: name } });
     try {
       const outcomes = checks[name](snapshot);
@@ -90,9 +100,10 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     }
   }
 
+  throwIfCancelled();
   emit({ event: "step-start", data: { step: "content" } });
   try {
-    const content = await runContentChecks(snapshot, llm);
+    const content = await runContentChecks(snapshot, llm, budget(deps.stepBudgets?.content ?? 75_000));
     injectionFlags += content.injectionFlags;
     const result = buildModuleResult("content", content.outcomes, content.couldntCheck);
     modules.push(result);
@@ -103,6 +114,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     emit({ event: "step-warn", data: { step: "content", message: errorText(err) } });
   }
 
+  throwIfCancelled();
   emit({ event: "step-start", data: { step: "performance" } });
   if (!deps.pagespeed) {
     const why = "PageSpeed is not configured";
@@ -110,7 +122,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     emit({ event: "step-warn", data: { step: "performance", message: why } });
   } else {
     try {
-      const perf = await runPerformanceChecks(snapshot.home.finalUrl, deps.pagespeed);
+      const perf = await runPerformanceChecks(snapshot.home.finalUrl, deps.pagespeed, budget(deps.stepBudgets?.performance ?? 60_000));
       if (perf.outcomes.length === 0) {
         const why = perf.couldntCheck[0]?.why ?? "no data";
         modules.push(failedModule("performance", why));
@@ -126,17 +138,23 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     }
   }
 
+  throwIfCancelled();
   emit({ event: "step-start", data: { step: "synthesis" } });
   const fixes = topFixes(modules);
   const ideaCouldntCheck: CouldntCheck[] = [];
   let ideas: Report["ideas"] = [];
   try {
-    const result = await generateIdeas(llm, { url: snapshot.home.finalUrl, summary: siteSummary(snapshot), findings: fixes });
+    const result = await generateIdeas(
+      llm,
+      { url: snapshot.home.finalUrl, summary: siteSummary(snapshot), findings: fixes },
+      budget(deps.stepBudgets?.ideas ?? 45_000),
+    );
     ideas = result.ideas;
     ideaCouldntCheck.push(...result.couldntCheck);
   } catch (err) {
     ideaCouldntCheck.push({ what: "Marketing ideas", why: errorText(err) });
   }
+  throwIfCancelled(); // do not build and store a report nobody is waiting for
 
   const report: Report = {
     id: (deps.newId ?? randomUUID)(),

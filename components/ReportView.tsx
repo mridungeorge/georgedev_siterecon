@@ -89,7 +89,7 @@ export default function ReportView({ report }: { report: Report }) {
       {report.ideas.length > 0 && (
         <section>
           <h3 className="mb-1 text-xl font-semibold">Marketing ideas</h3>
-          <p className="mb-3 text-sm text-[var(--muted)]">Each idea is tied to a problem found above.</p>
+          <p className="mb-3 text-sm text-[var(--muted)]">AI-generated suggestions, each tied to a problem found above. Check them before acting.</p>
           <ul className="space-y-3">
             {report.ideas.map((idea, i) => (
               <li key={i} className="border border-[var(--line)] p-4">
