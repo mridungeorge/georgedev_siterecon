@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Not part of the Next.js app: the Python service (with its virtual environment), local data and notes.
+    "fetch-service/**",
+    "data/**",
+    ".superpowers/**",
   ]),
 ]);
 

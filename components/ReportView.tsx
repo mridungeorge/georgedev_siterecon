@@ -105,6 +105,69 @@ export default function ReportView({ report }: { report: Report }) {
         </section>
       )}
 
+      {report.competitors && (
+        <section>
+          <h3 className="mb-1 text-xl font-semibold">Competitor comparison</h3>
+          {report.competitors.note && <p className="mb-3 text-sm text-[var(--muted)]">{report.competitors.note}</p>}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[32rem] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--muted)]">
+                  <th className="py-2 pr-4">Site</th><th className="py-2 pr-4">SEO</th><th className="py-2 pr-4">AI visibility</th><th className="py-2">Social</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-[var(--line)] font-medium">
+                  <td className="py-2 pr-4">{report.domain} (you)</td>
+                  <td className="py-2 pr-4 tabular-nums">{report.modules.find((m) => m.module === "technical")?.score ?? "n/a"}</td>
+                  <td className="py-2 pr-4 tabular-nums">{report.modules.find((m) => m.module === "geo")?.score ?? "n/a"}</td>
+                  <td className="py-2">{[...new Set((report.social?.profiles ?? []).filter((p) => p.kind === "profile").map((p) => p.platform))].join(", ") || "none"}</td>
+                </tr>
+                {report.competitors.rows.map((row) => (
+                  <tr key={row.domain} className="border-b border-[var(--line)]">
+                    <td className="py-2 pr-4 break-all">{row.domain}</td>
+                    <td className="py-2 pr-4 tabular-nums">{row.technical ?? "n/a"}</td>
+                    <td className="py-2 pr-4 tabular-nums">{row.geo ?? "n/a"}</td>
+                    <td className="py-2">{row.platforms.join(", ") || "none"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
+            {report.competitors.gaps.map((gap, i) => <li key={i}>{gap}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {report.social && (
+        <section>
+          <h3 className="mb-1 text-xl font-semibold">Social media</h3>
+          <p className="mb-3 text-sm text-[var(--muted)]">
+            {report.social.readerUsed ? "Public pages only. Profiles that need a login are not read." : "Links found on the site. The profile pages themselves were not opened."}
+            {report.social.mentions ? ` ${report.social.mentions.hackerNews} Hacker News stories mention this site.` : ""}
+          </p>
+          {report.social.profiles.length === 0 ? (
+            <p className="text-sm">No social profiles are linked from the homepage.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {report.social.profiles.map((p) => (
+                <li key={p.url} className="flex flex-wrap items-baseline gap-x-3 border border-[var(--line)] p-3">
+                  <span className="font-medium">{p.platform}</span>
+                  <span className="break-all text-[var(--muted)]">{p.url}</span>
+                  <span className="text-xs uppercase tracking-wide" style={{ color: p.status === "not_found" ? "var(--bad)" : p.status === "found" ? "var(--live)" : "var(--muted)" }}>
+                    {p.kind === "homepage" ? "placeholder link" : p.status.replace("_", " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {report.social.missing.length > 0 && (
+            <p className="mt-3 text-sm">Not linked: {report.social.missing.join(", ")}.</p>
+          )}
+        </section>
+      )}
+
       {report.injectionFlags > 0 && (
         <p className="border border-[var(--line)] p-4 text-sm text-[var(--warn)]">
           This site&apos;s text contains {report.injectionFlags} instruction-like passage{report.injectionFlags === 1 ? "" : "s"} aimed

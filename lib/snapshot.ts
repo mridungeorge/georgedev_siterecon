@@ -17,6 +17,8 @@ export interface SiteSnapshot {
   sitemapXml: string | null;
   llmsTxt: string | null;
   fetchedAt: string;
+  /** What a real browser saw, when the optional render step ran. */
+  rendered?: { words: number; mobileOverflow: boolean };
 }
 
 export class TargetUnreachableError extends Error {}

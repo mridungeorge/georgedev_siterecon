@@ -173,7 +173,7 @@ describe("I1: cancelling a scan stops the AI and PageSpeed work", () => {
     };
     const pagespeed: PageSpeedDeps = { apiKey: "k", quotaOk: () => true, fetchJson: async (_u, s) => { psiSignals.push(s); return GOOD_PSI; } };
     await runScan(new URL(`${O}/`), { fetchPage, emit: () => {}, llm, pagespeed, signal: controller.signal });
-    expect(llmSignals.length).toBe(2);
+    expect(llmSignals.length).toBe(3); // content review, competitor discovery, marketing ideas
     expect(psiSignals.length).toBe(1);
     expect([...llmSignals, ...psiSignals].every((s) => s !== undefined && !s.aborted)).toBe(true);
     controller.abort();
@@ -197,7 +197,7 @@ describe("I1: cancelling a scan stops the AI and PageSpeed work", () => {
     const pagespeed: PageSpeedDeps = { apiKey: "k", quotaOk: () => true, fetchJson: (_u, s) => hangsUntilAborted(s) };
     const started = Date.now();
     const report = await runScan(new URL(`${O}/`), {
-      fetchPage, emit: () => {}, llm, pagespeed, stepBudgets: { content: 40, performance: 40, ideas: 40 },
+      fetchPage, emit: () => {}, llm, pagespeed, stepBudgets: { content: 40, performance: 40, social: 40, competitors: 40, ideas: 40 },
     });
     expect(Date.now() - started).toBeLessThan(3000);
     expect(report.modules.find((m) => m.module === "content")!.status).toBe("partial");

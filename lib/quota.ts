@@ -5,7 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 const DAY = 24 * 60 * 60 * 1000;
 
-export type QuotaName = "llm" | "pagespeed";
+export type QuotaName = "llm" | "pagespeed" | "search";
 export type QuotaLimits = Record<QuotaName, number>;
 
 function num(value: string | undefined, fallback: number): number {
@@ -15,8 +15,9 @@ function num(value: string | undefined, fallback: number): number {
 
 export function quotaLimits(env: Record<string, string | undefined> = process.env): QuotaLimits {
   return {
-    llm: num(env.QUOTA_LLM_DAY, 400), // about 8 calls a scan, 50 scans a day
+    llm: num(env.QUOTA_LLM_DAY, 400), // each scan uses about 3 to 4 units: content review, competitors and ideas
     pagespeed: num(env.QUOTA_PAGESPEED_DAY, 200),
+    search: num(env.QUOTA_SEARCH_DAY, 30), // Tavily's free plan is 1,000 credits a month
   };
 }
 

@@ -9,6 +9,8 @@ import { runScan } from "./pipeline/run";
 import type { ScanQueue } from "./scan-queue";
 import type { LlmClient } from "./llm/router";
 import type { PageSpeedDeps } from "./checks/performance";
+import type { FetchClient } from "./fetch-client";
+import type { SearchFn } from "./search/tavily";
 
 export interface ScanDeps {
   db: DatabaseSync;
@@ -17,12 +19,17 @@ export interface ScanDeps {
   /** Free-tier AI and PageSpeed. Leave out to scan without them. */
   llm?: LlmClient | null;
   pagespeed?: PageSpeedDeps | null;
+  /** The optional Python service, an optional free search, and the Hacker News mention counter. */
+  fetchClient?: FetchClient | null;
+  search?: SearchFn | null;
+  mentions?: ((domain: string, signal?: AbortSignal) => Promise<number | null>) | null;
   now?: () => number;
   scanTimeoutMs?: number;
   heartbeatMs?: number;
 }
 
-const SCAN_TIMEOUT_MS = 6 * 60 * 1000;
+// The whole-scan ceiling. The step budgets in pipeline/run.ts add up to this in the worst case.
+const SCAN_TIMEOUT_MS = 9 * 60 * 1000;
 const HEARTBEAT_MS = 15_000;
 
 function sse(event: string, data: unknown): string {
@@ -131,7 +138,7 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
             reject(new Error("The scan took too long and was stopped."));
           }, deps.scanTimeoutMs ?? SCAN_TIMEOUT_MS);
         });
-        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, signal: abort.signal });
+        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, fetchClient: deps.fetchClient, search: deps.search, mentions: deps.mentions, signal: abort.signal });
         const report = await Promise.race([scan, timeout]);
         saveReport(deps.db, report);
         purgeExpiredReports(deps.db, now());

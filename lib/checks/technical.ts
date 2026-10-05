@@ -157,6 +157,18 @@ export function runTechnicalChecks(s: SiteSnapshot): CheckOutcome[] {
     evidence: at("missing og:title or og:image"),
   });
 
+  // Only when a real browser rendered the page (the optional fetch service). Weights are
+  // normalised per module, so this extra check does not distort the others.
+  if (s.rendered) {
+    check("mobile-layout", 4, !s.rendered.mobileOverflow, {
+      severity: "medium", effort: "medium",
+      title: "The page is wider than a phone screen",
+      detail: "On a phone the page needs sideways scrolling. Visitors leave pages like this, and Google ranks the mobile version of a page.",
+      fix: "Find the element wider than the screen (often a fixed-width image, table or embed) and make it fit with max-width: 100%.",
+      evidence: at("in a phone-sized browser window the page was wider than the screen"),
+    });
+  }
+
   check("hsts", 3, Boolean(s.home.headers["strict-transport-security"]), {
     severity: "low", effort: "low",
     title: "The site does not send an HSTS header",

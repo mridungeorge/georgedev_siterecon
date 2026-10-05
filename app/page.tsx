@@ -6,7 +6,8 @@ import { STEPS, type StepName } from "@/lib/pipeline/steps";
 import ReportView from "@/components/ReportView";
 
 const STEP_LABEL: Record<StepName, string> = {
-  fetch: "Read site", technical: "SEO", geo: "AI visibility", content: "Content", performance: "Speed", synthesis: "Report",
+  fetch: "Read site", render: "Browser", technical: "SEO", geo: "AI visibility", content: "Content", performance: "Speed",
+  social: "Social", competitors: "Competitors", synthesis: "Report",
 };
 
 export default function Home() {

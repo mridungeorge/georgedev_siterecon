@@ -41,10 +41,10 @@ describe("runScan with the AI and PageSpeed modules", () => {
     const report = await run(HOME, { llm, pagespeed }, events);
 
     expect(events.filter((e) => e.event === "step-start").map((e) => e.data.step)).toEqual([
-      "fetch", "technical", "geo", "content", "performance", "synthesis",
+      "fetch", "render", "technical", "geo", "content", "performance", "social", "competitors", "synthesis",
     ]);
     expect(() => ReportSchema.parse(report)).not.toThrow();
-    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance"]);
+    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance", "social"]);
     expect(report.modules.find((m) => m.module === "performance")!.score).toBe(100);
     expect(report.modules.find((m) => m.module === "content")!.score).not.toBeNull();
     expect(report.ideas).toHaveLength(1);
@@ -80,7 +80,7 @@ describe("runScan with the AI and PageSpeed modules", () => {
 
   it("works with no AI and no PageSpeed at all, like the first version did", async () => {
     const report = await run(HOME, { llm: null, pagespeed: null });
-    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance"]);
+    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance", "social"]);
     expect(report.overallScore).not.toBeNull();
   });
 

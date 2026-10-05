@@ -56,12 +56,26 @@ export function runGeoChecks(s: SiteSnapshot): CheckOutcome[] {
   $("script, style, noscript, template, svg").remove();
   const bodyText = $("body").text().replace(/\s+/g, " ").trim();
   const wordCount = words(bodyText);
+  // When the optional browser render ran, a gap between what a browser sees and what is in the
+  // raw HTML is direct proof that AI crawlers are missing content.
+  const browserWords = s.rendered?.words ?? 0;
+  const jsOnly = browserWords >= 150 && wordCount < 150;
   check("content-in-html", 20, wordCount >= 150, {
     severity: "critical", effort: "high",
-    title: `Only ${wordCount} words of content are in the HTML of the page`,
-    detail: "Most AI crawlers do not run JavaScript. If the content only appears after scripts run, they see an almost empty page.",
+    title: jsOnly
+      ? `Only ${wordCount} words are in the HTML, but a browser shows ${browserWords}`
+      : `Only ${wordCount} words of content are in the HTML of the page`,
+    detail: jsOnly
+      ? "A real browser shows far more text than the HTML contains, so the content is added by JavaScript. Most AI crawlers do not run JavaScript and see an almost empty page."
+      : "Most AI crawlers do not run JavaScript. If the content only appears after scripts run, they see an almost empty page.",
     fix: "Render the main content on the server (SSR or static generation) so it is present in the initial HTML.",
-    evidence: [{ url, note: `${wordCount} words of visible text in the raw HTML`, ...(bodyText ? { quote: clip(bodyText) } : {}) }],
+    evidence: [{
+      url,
+      note: jsOnly
+        ? `${wordCount} words in the raw HTML against ${browserWords} words in a real browser`
+        : `${wordCount} words of visible text in the raw HTML`,
+      ...(bodyText ? { quote: clip(bodyText) } : {}),
+    }],
   });
 
   const fresh = cheerio.load(s.home.body);

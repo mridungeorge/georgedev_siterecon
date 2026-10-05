@@ -33,6 +33,48 @@ export const IdeaSchema = z.object({
 });
 export type Idea = z.infer<typeof IdeaSchema>;
 
+export const PlatformSchema = z.enum(["facebook", "instagram", "x", "linkedin", "youtube", "tiktok", "pinterest", "github"]);
+export type Platform = z.infer<typeof PlatformSchema>;
+
+/** One social profile linked from the site, and what a public read of it showed. */
+export const SocialProfileSchema = z.object({
+  platform: PlatformSchema,
+  url: z.string(),
+  handle: z.string().nullable(),
+  kind: z.enum(["profile", "homepage"]),
+  status: z.enum(["linked", "found", "not_found", "login_wall", "unreadable"]),
+  title: z.string().optional(),
+  note: z.string().optional(),
+  lastActivityAt: z.string().optional(),
+});
+export type SocialProfile = z.infer<typeof SocialProfileSchema>;
+
+export const SocialSummarySchema = z.object({
+  profiles: z.array(SocialProfileSchema),
+  /** Key platforms (Facebook, Instagram, LinkedIn) the site does not link to. */
+  missing: z.array(PlatformSchema),
+  mentions: z.object({ hackerNews: z.number().int().min(0) }).nullable().default(null),
+  readerUsed: z.boolean(),
+});
+export type SocialSummary = z.infer<typeof SocialSummarySchema>;
+
+export const CompetitorRowSchema = z.object({
+  domain: z.string(),
+  url: z.string(),
+  source: z.enum(["ai", "search"]),
+  technical: z.number().nullable(),
+  geo: z.number().nullable(),
+  platforms: z.array(PlatformSchema),
+});
+export type CompetitorRow = z.infer<typeof CompetitorRowSchema>;
+
+export const CompetitorTableSchema = z.object({
+  rows: z.array(CompetitorRowSchema),
+  gaps: z.array(z.string()),
+  note: z.string().optional(),
+});
+export type CompetitorTable = z.infer<typeof CompetitorTableSchema>;
+
 export const ModuleResultSchema = z.object({
   module: ModuleNameSchema,
   status: z.enum(["ok", "partial", "failed"]),
@@ -56,6 +98,9 @@ export const ReportSchema = z.object({
   injectionFlags: z.number().int().min(0),
   // Reports stored before marketing ideas existed have none, so they still load.
   ideas: z.array(IdeaSchema).default([]),
+  // Added later: reports stored before these existed still load, with them empty.
+  social: SocialSummarySchema.nullable().default(null),
+  competitors: CompetitorTableSchema.nullable().default(null),
 });
 
 export type ModuleName = z.infer<typeof ModuleNameSchema>;

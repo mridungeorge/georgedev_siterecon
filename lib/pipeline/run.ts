@@ -5,7 +5,11 @@ import { runTechnicalChecks } from "@/lib/checks/technical";
 import { runGeoChecks } from "@/lib/checks/geo";
 import { runContentChecks } from "@/lib/checks/content";
 import { runPerformanceChecks, type PageSpeedDeps } from "@/lib/checks/performance";
+import { runSocialChecks } from "@/lib/checks/social";
+import { findCompetitors } from "@/lib/competitors";
 import { generateIdeas } from "@/lib/ideas";
+import type { FetchClient } from "@/lib/fetch-client";
+import type { SearchFn } from "@/lib/search/tavily";
 import type { LlmClient } from "@/lib/llm/router";
 import { buildModuleResult, failedModule, overallScore, topFixes } from "@/lib/scoring";
 import { buildFixPrompt } from "@/lib/fix-prompt";
@@ -29,17 +33,23 @@ export interface RunDeps {
   llm?: LlmClient | null;
   /** Null or missing means performance is reported as could not check. */
   pagespeed?: PageSpeedDeps | null;
+  /** The optional Python service: reads public social pages and renders the page in a browser. */
+  fetchClient?: FetchClient | null;
+  /** Optional free web search, used to find more competitors. */
+  search?: SearchFn | null;
+  /** Counts public Hacker News mentions of the domain. */
+  mentions?: ((domain: string, signal?: AbortSignal) => Promise<number | null>) | null;
   /** Ends the scan early (the visitor left, or the scan ran out of time). */
   signal?: AbortSignal;
   /** Most time, in ms, each outside-service step may take. Keeps a slow provider from using up the scan. */
-  stepBudgets?: { content?: number; performance?: number; ideas?: number };
+  stepBudgets?: { render?: number; content?: number; performance?: number; social?: number; competitors?: number; ideas?: number };
   /** Lets tests replace a module. Production uses the real checks. */
   modules?: Partial<Record<CheckModule, (s: SiteSnapshot) => CheckOutcome[]>>;
 }
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : "unknown error");
 
-/** A short plain-text summary of the site for the ideas prompt. It comes from the site, so it is fenced as untrusted there. */
+/** A short plain-text summary of the site for the ideas and competitor prompts. It comes from the site, so it is fenced as untrusted there. */
 function siteSummary(s: SiteSnapshot): string {
   const $ = cheerio.load(s.home.body);
   $("script, style, noscript, template, svg").remove();
@@ -57,10 +67,12 @@ function siteSummary(s: SiteSnapshot): string {
 export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   const { fetchPage, emit } = deps;
   const llm = deps.llm ?? null;
+  const budgets = deps.stepBudgets ?? {};
   const throwIfCancelled = () => {
     if (deps.signal?.aborted) throw new Error("The scan was cancelled.");
   };
-  // Worst case adds up to under the 6-minute ceiling: fetch about 150 s, then 75 + 60 + 45 s.
+  // Worst case, in seconds: fetch about 150, render 75, content 75, speed 60, social 45, competitors 90, ideas 45.
+  // That is 540, the whole-scan ceiling. In practice scans take a small fraction of this.
   const budget = (ms: number) => (deps.signal ? AbortSignal.any([deps.signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
   const checks: Record<CheckModule, (s: SiteSnapshot) => CheckOutcome[]> = {
     technical: deps.modules?.technical ?? runTechnicalChecks,
@@ -80,11 +92,33 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   });
 
   const modules: ModuleResult[] = [];
+  const extraCouldntCheck: CouldntCheck[] = [];
   let injectionFlags = 0;
 
   const summarise = (result: ModuleResult, total: number) =>
     `${result.passed.length} of ${total} checks passed, ${result.findings.length} issues found` +
     (result.couldntCheck.length ? `, ${result.couldntCheck.length} could not be checked` : "");
+
+  // Browser render (optional). What a real browser sees feeds the technical and AI-readiness checks below.
+  throwIfCancelled();
+  emit({ event: "step-start", data: { step: "render" } });
+  if (!deps.fetchClient) {
+    emit({ event: "step-done", data: { step: "render", message: "Skipped: the browser tier is not set up on this server" } });
+  } else {
+    try {
+      const rendered = await deps.fetchClient.render(snapshot.home.finalUrl, budget(budgets.render ?? 75_000));
+      if (rendered.status === "ok") {
+        snapshot.rendered = { words: rendered.words, mobileOverflow: rendered.mobileOverflow };
+        emit({ event: "step-done", data: { step: "render", message: `A real browser saw ${rendered.words} words${rendered.mobileOverflow ? " and a page wider than a phone screen" : ""}` } });
+      } else {
+        extraCouldntCheck.push({ what: "Browser rendering", why: rendered.reason });
+        emit({ event: "step-done", data: { step: "render", message: `Skipped: ${rendered.reason}` } });
+      }
+    } catch (err) {
+      extraCouldntCheck.push({ what: "Browser rendering", why: errorText(err) });
+      emit({ event: "step-warn", data: { step: "render", message: errorText(err) } });
+    }
+  }
 
   for (const name of ["technical", "geo"] as const) {
     throwIfCancelled();
@@ -103,7 +137,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   throwIfCancelled();
   emit({ event: "step-start", data: { step: "content" } });
   try {
-    const content = await runContentChecks(snapshot, llm, budget(deps.stepBudgets?.content ?? 75_000));
+    const content = await runContentChecks(snapshot, llm, budget(budgets.content ?? 75_000));
     injectionFlags += content.injectionFlags;
     const result = buildModuleResult("content", content.outcomes, content.couldntCheck);
     modules.push(result);
@@ -122,7 +156,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     emit({ event: "step-warn", data: { step: "performance", message: why } });
   } else {
     try {
-      const perf = await runPerformanceChecks(snapshot.home.finalUrl, deps.pagespeed, budget(deps.stepBudgets?.performance ?? 60_000));
+      const perf = await runPerformanceChecks(snapshot.home.finalUrl, deps.pagespeed, budget(budgets.performance ?? 60_000));
       if (perf.outcomes.length === 0) {
         const why = perf.couldntCheck[0]?.why ?? "no data";
         modules.push(failedModule("performance", why));
@@ -139,6 +173,55 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   }
 
   throwIfCancelled();
+  emit({ event: "step-start", data: { step: "social" } });
+  let social: Report["social"] = null;
+  try {
+    const socialSignal = budget(budgets.social ?? 45_000);
+    const client = deps.fetchClient ?? null;
+    const result = await runSocialChecks(snapshot, client ? (link, signal) => client.readProfile(link, signal) : null, socialSignal);
+    if (deps.mentions) {
+      const hits = await deps.mentions(snapshot.domain, socialSignal).catch(() => null);
+      result.summary.mentions = hits === null ? null : { hackerNews: hits };
+    }
+    social = result.summary;
+    const moduleResult = buildModuleResult("social", result.outcomes, result.couldntCheck);
+    modules.push(moduleResult);
+    emit({ event: "step-done", data: { step: "social", message: `${result.summary.profiles.length} social links found. ${summarise(moduleResult, result.outcomes.length)}` } });
+  } catch (err) {
+    modules.push(failedModule("social", errorText(err)));
+    emit({ event: "step-warn", data: { step: "social", message: errorText(err) } });
+  }
+
+  throwIfCancelled();
+  emit({ event: "step-start", data: { step: "competitors" } });
+  let competitors: Report["competitors"] = null;
+  try {
+    const competitorSignal = budget(budgets.competitors ?? 90_000);
+    const scoreOf = (m: "technical" | "geo") => modules.find((x) => x.module === m)?.score ?? null;
+    const result = await findCompetitors(
+      {
+        domain: snapshot.domain,
+        title: $title(snapshot),
+        description: "",
+        summary: siteSummary(snapshot),
+        technical: scoreOf("technical"),
+        geo: scoreOf("geo"),
+        platforms: [...new Set((social?.profiles ?? []).filter((p) => p.kind === "profile").map((p) => p.platform))],
+      },
+      { llm, search: deps.search ?? null, fetchPage: (url) => fetchPage(url, competitorSignal), signal: competitorSignal },
+    );
+    competitors = result.table;
+    extraCouldntCheck.push(...result.couldntCheck);
+    emit({
+      event: result.table ? "step-done" : "step-warn",
+      data: { step: "competitors", message: result.table ? `${result.table.rows.length} competitors compared` : (result.couldntCheck[0]?.why ?? "no competitors found") },
+    });
+  } catch (err) {
+    extraCouldntCheck.push({ what: "Competitor comparison", why: errorText(err) });
+    emit({ event: "step-warn", data: { step: "competitors", message: errorText(err) } });
+  }
+
+  throwIfCancelled();
   emit({ event: "step-start", data: { step: "synthesis" } });
   const fixes = topFixes(modules);
   const ideaCouldntCheck: CouldntCheck[] = [];
@@ -147,7 +230,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     const result = await generateIdeas(
       llm,
       { url: snapshot.home.finalUrl, summary: siteSummary(snapshot), findings: fixes },
-      budget(deps.stepBudgets?.ideas ?? 45_000),
+      budget(budgets.ideas ?? 45_000),
     );
     ideas = result.ideas;
     ideaCouldntCheck.push(...result.couldntCheck);
@@ -165,14 +248,20 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     modules,
     topFixes: fixes,
     fixPrompt: buildFixPrompt({ url: snapshot.home.finalUrl, findings: fixes }),
-    couldntCheck: [...couldntCheck, ...modules.flatMap((m) => m.couldntCheck), ...ideaCouldntCheck],
+    couldntCheck: [...couldntCheck, ...modules.flatMap((m) => m.couldntCheck), ...extraCouldntCheck, ...ideaCouldntCheck],
     pagesScanned,
     injectionFlags,
     ideas,
+    social,
+    competitors,
   };
   emit({
     event: "step-done",
     data: { step: "synthesis", message: `Overall score ${report.overallScore ?? "n/a"}, ${fixes.length} prioritised fixes, ${ideas.length} marketing ideas` },
   });
   return report;
+}
+
+function $title(s: SiteSnapshot): string {
+  return cheerio.load(s.home.body)("head > title").first().text().replace(/\s+/g, " ").trim();
 }
