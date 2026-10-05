@@ -18,7 +18,7 @@ export interface ContentResult {
   injectionFlags: number;
 }
 
-const RUBRIC = [
+export const RUBRIC = [
   { id: "value-prop", title: "The homepage does not make its value clear",
     question: "Within the first screen, can a visitor tell what the business offers and why it is worth choosing?",
     detail: "A visitor should understand within seconds what the business offers and why to choose it. The review found the opening copy unclear on this.",

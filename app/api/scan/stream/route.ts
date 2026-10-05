@@ -7,6 +7,7 @@ import { tryConsumeQuota } from "@/lib/quota";
 import { createFetchClient } from "@/lib/fetch-client";
 import { createTavilySearch } from "@/lib/search/tavily";
 import { countHackerNewsMentions } from "@/lib/mentions";
+import { logScanRun } from "@/lib/observability/mlflow";
 import type { PageSpeedDeps } from "@/lib/checks/performance";
 
 export const runtime = "nodejs";
@@ -42,5 +43,6 @@ export function GET(req: Request) {
     fetchClient,
     search: createTavilySearch({ apiKey: process.env.TAVILY_API_KEY, db }),
     mentions: (domain, signal) => countHackerNewsMentions(domain, fetch, signal),
+    logRun: process.env.MLFLOW_URL ? (report, ms) => logScanRun({ baseUrl: process.env.MLFLOW_URL as string }, report, ms) : null,
   });
 }

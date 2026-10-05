@@ -11,6 +11,7 @@ import type { LlmClient } from "./llm/router";
 import type { PageSpeedDeps } from "./checks/performance";
 import type { FetchClient } from "./fetch-client";
 import type { SearchFn } from "./search/tavily";
+import type { Report } from "./pipeline/schemas";
 
 export interface ScanDeps {
   db: DatabaseSync;
@@ -23,6 +24,8 @@ export interface ScanDeps {
   fetchClient?: FetchClient | null;
   search?: SearchFn | null;
   mentions?: ((domain: string, signal?: AbortSignal) => Promise<number | null>) | null;
+  /** Called once per finished scan, e.g. to log it to MLflow. A failure here never affects the scan. */
+  logRun?: ((report: Report, durationMs: number) => Promise<unknown>) | null;
   now?: () => number;
   scanTimeoutMs?: number;
   heartbeatMs?: number;
@@ -93,6 +96,7 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
   if (!slot) return json(503, { error: "SiteRecon is busy right now. Please try again in a few minutes." }, { "Retry-After": "120" });
 
   const token = commitRateLimit(deps.db, ip, domain, now());
+  const startedAt = Date.now();
 
   // One abort signal covers every way a scan can stop early: the visitor leaving, the
   // time ceiling, or the scan finishing. Aborting it cancels in-flight requests to the
@@ -141,6 +145,7 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
         scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, fetchClient: deps.fetchClient, search: deps.search, mentions: deps.mentions, signal: abort.signal });
         const report = await Promise.race([scan, timeout]);
         saveReport(deps.db, report);
+        if (deps.logRun) void Promise.resolve().then(() => deps.logRun!(report, Date.now() - startedAt)).catch(() => {});
         purgeExpiredReports(deps.db, now());
         send(sse("report", report));
       } catch (err) {

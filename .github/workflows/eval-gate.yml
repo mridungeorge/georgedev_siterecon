@@ -1,0 +1,31 @@
+name: Eval regression gate
+
+# Same idea as RepoRecon's eval-gate.yml: gate merges on measured accuracy, not just green tests.
+# Runs the real audit over the hand-built fixture sites and fails if it misses seeded problems,
+# reports problems that are not there, or if any adversarial case stops holding.
+on:
+  push:
+    branches: [master]
+  pull_request: {}
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Accuracy on the fixture sites
+        run: npm run eval
+      - name: Adversarial cases
+        run: npm run eval:adversarial
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scorecards
+          path: |
+            eval/scorecard.json
+            eval/adversarial-scorecard.json

@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import { useScanStream } from "@/lib/useScanStream";
 // Import from steps, not run: run pulls in server-only code and would break the client build.
 import { STEPS, type StepName } from "@/lib/pipeline/steps";
@@ -39,7 +40,10 @@ export default function Home() {
           {running ? "Scanning…" : "Scan site"}
         </button>
       </form>
-      <p className="mt-3 text-sm text-[var(--muted)]">Free. Reads public pages only and respects robots.txt.</p>
+      <p className="mt-3 text-sm text-[var(--muted)]">
+        Free. Reads public pages only and respects robots.txt.{" "}
+        <Link href="/methodology" className="underline">What is checked</Link> · <Link href="/accuracy" className="underline">How it is tested</Link>
+      </p>
 
       {state.status !== "idle" && (
         <div className="mt-10 border border-[var(--line)] p-6" aria-live="polite">
