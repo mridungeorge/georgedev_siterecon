@@ -15,8 +15,9 @@ on:
 
 jobs:
   deploy:
-    # Only deploy a commit whose tests passed.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Only a commit that was PUSHED to master and passed every CI step, including the accuracy and
+    # adversarial gates. A pull request from a branch that happens to be called master does not count.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,10 +41,14 @@ jobs:
             sudo -u ${{ vars.DEPLOY_USER }} -i bash -c 'cd ~/siterecon && git pull --ff-only && npm ci && npm run build' && \
             sudo systemctl restart siterecon && \
             sudo -u ${{ vars.DEPLOY_USER }} -i bash -c 'cd ~/siterecon && GITHUB_OWNER=${{ github.repository_owner }} bash deploy/vm/run-fetch.sh' && \
-            sleep 5 && \
-            curl -sf http://127.0.0.1:3001/api/accuracy > /dev/null && echo DEPLOY_OK
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12; do curl -sf http://127.0.0.1:3001/api/accuracy > /dev/null && echo DEPLOY_OK && exit 0; sleep 5; done; echo "app did not come back within 60 seconds"; exit 1
 
       - name: Show deploy output
+        if: always()
+        env:
+          # Passed through the environment so a quote or a $ in the VM's output cannot break or hijack the step.
+          DEPLOY_STDOUT: ${{ steps.deploy.outputs.stdout }}
+          DEPLOY_STDERR: ${{ steps.deploy.outputs.stderr }}
         run: |
-          echo '${{ steps.deploy.outputs.stdout }}'
-          echo '${{ steps.deploy.outputs.stderr }}'
+          printf '%s\n' "$DEPLOY_STDOUT"
+          printf '%s\n' "$DEPLOY_STDERR"

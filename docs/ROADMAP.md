@@ -4,9 +4,9 @@
 
 - The audit: SEO, AI visibility, content and conversion, speed, social, competitors, marketing ideas, fix prompt
 - Rate limiting, quotas, queue, cancellation, SSRF protection
-- The Python fetch service, including a real Chromium render (verified locally against example.com and georgemridun.dev)
+- The Python fetch service, including a real Chromium render run through the killable-subprocess path (checked by hand on this machine against example.com and georgemridun.dev; not part of the automated tests)
 - `/methodology`, `/accuracy`, `/api/accuracy`, MLflow logging
-- Eval harness (9 fixture sites, 48 seeded problems) and an adversarial set (10 cases), both CI gates
+- Eval harness (9 fixture sites, 48 seeded problems) and an adversarial set (10 cases). Both run in CI, and the deploy workflow only starts after CI succeeds on a push to master. The adversarial competitor case was checked with a mutation test (the defence removed, the case fails).
 - The portfolio section (`george-portfolio`, hidden until `NEXT_PUBLIC_SITERECON_URL` is set)
 
 ## Written but not run
@@ -22,6 +22,13 @@ These need a real VM or Docker, which were not available during the build.
 No API keys were available, so the AI router (NVIDIA NIM and Gemini), PageSpeed, Tavily and MLflow are tested against fakes only. Whether NIM's model accepts JSON-mode output is untested; if it does not, every call falls through to Gemini.
 
 ## Known gaps (deferred review findings)
+
+- The browser request filter is best effort. Playwright does not route service-worker traffic through it, and a DNS-rebinding name can pass its check and then resolve privately. The container firewall is the boundary, which is why the deploy refuses to start the container without it.
+- If Scrapling's setup hook fails silently, the page has already loaded before the failure is noticed. Only two numbers leave the worker, but the filter is not guaranteed for that one load.
+- The deploy builds on the live machine (`npm run build` rewrites `.next` under the running server) and can pull the container image before the new one is published. A deploy that follows a change to `fetch-service/` may start the previous image until the next deploy.
+- `/usr/bin/env npm` in the systemd unit needs npm on the default PATH (an nvm install would need `Environment=PATH=...`).
+- Social is scored on 65 weight units when the fetch service is absent, yet still counts 15% of the overall score.
+- A failure after MLflow's run is created can leave that run marked RUNNING.
 
 - `extractJson` is slow on huge whitespace and fails when prose before the JSON contains `[`.
 - AI quote matching is not Unicode-normalised, so curly versus straight quotes can drop a genuine quote.

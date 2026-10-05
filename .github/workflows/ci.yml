@@ -1,5 +1,8 @@
 name: CI
 
+# The deploy workflow runs only after this one succeeds on a push to master, so everything that must
+# pass before a deploy is a step here: types, lint, tests, the build, and the accuracy and
+# adversarial gates (the same idea as RepoRecon's eval gate).
 on:
   push:
     branches: [master]
@@ -18,6 +21,17 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm run lint
       - run: npm test
+      - name: Accuracy on the fixture sites
+        run: npm run eval
+      - name: Adversarial cases
+        run: npm run eval:adversarial
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scorecards
+          path: |
+            eval/scorecard.json
+            eval/adversarial-scorecard.json
       - run: npm run build
 
   fetch-service:

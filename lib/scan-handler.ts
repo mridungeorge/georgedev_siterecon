@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { corsHeaders } from "./cors";
 import { InvalidTargetError, normalizeTargetUrl, targetDomain } from "./url-guard";
-import { commitRateLimit, getClientIp, peekRateLimit, refundRateLimit } from "./rate-limit";
+import { commitRateLimit, getClientIp, peekRateLimit, refundRateLimit, tryConsumeCompetitorFetch } from "./rate-limit";
 import { getCachedReport, purgeExpiredReports, saveReport } from "./report-store";
 import { BlockedByRobotsError, NotHtmlError, TargetUnreachableError, type PageFetcher } from "./snapshot";
 import { BlockedAddressError } from "./safe-fetch";
@@ -142,7 +142,7 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
             reject(new Error("The scan took too long and was stopped."));
           }, deps.scanTimeoutMs ?? SCAN_TIMEOUT_MS);
         });
-        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, fetchClient: deps.fetchClient, search: deps.search, mentions: deps.mentions, signal: abort.signal });
+        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, fetchClient: deps.fetchClient, search: deps.search, mentions: deps.mentions, allowCompetitorDomain: (d) => tryConsumeCompetitorFetch(deps.db, d, now()), signal: abort.signal });
         const report = await Promise.race([scan, timeout]);
         saveReport(deps.db, report);
         if (deps.logRun) void Promise.resolve().then(() => deps.logRun!(report, Date.now() - startedAt)).catch(() => {});

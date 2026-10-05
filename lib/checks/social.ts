@@ -24,6 +24,7 @@ export interface SocialResult {
 }
 
 const MAX_READS = 6;
+const MAX_LINKS = 20;
 const STALE_AFTER_MS = 180 * 24 * 60 * 60 * 1000;
 
 export async function runSocialChecks(
@@ -36,7 +37,11 @@ export async function runSocialChecks(
   const couldntCheck: CouldntCheck[] = [];
   const url = s.home.finalUrl;
 
-  const { links, sameAs } = extractSocialLinks(s.home.body, url);
+  const extracted = extractSocialLinks(s.home.body, url);
+  const sameAs = extracted.sameAs;
+  // A page can link thousands of profiles. Twenty is more than any real brand needs, and it keeps the
+  // report, the stored copy and the live stream small.
+  const links = extracted.links.slice(0, MAX_LINKS);
   const profiles = links.filter((l) => l.kind === "profile");
   const placeholders = links.filter((l) => l.kind === "homepage");
   const platformsLinked = new Set(profiles.map((l) => l.platform));
@@ -104,14 +109,19 @@ export async function runSocialChecks(
       }
     });
 
+    // Scored only when at least one page was really answered. If every read failed (the service is
+    // down, every profile is behind a login), nothing was checked, so nothing may be credited.
     const missing = toRead.filter((_, i) => reads[i].status === "not_found");
-    check("profiles-reachable", 25, missing.length === 0, {
-      severity: "high", effort: "low",
-      title: `${missing.length} linked social profile${missing.length === 1 ? " does" : "s do"} not exist`,
-      detail: "A broken social link tells visitors the business is neglected, and it sends them away.",
-      fix: "Correct or remove each broken social link.",
-      evidence: missing.slice(0, 3).map((l) => ({ url: l.url, note: "the platform reports that this page does not exist" })),
-    });
+    const answered = reads.some((r) => r.status === "found" || r.status === "not_found");
+    if (answered) {
+      check("profiles-reachable", 25, missing.length === 0, {
+        severity: "high", effort: "low",
+        title: `${missing.length} linked social profile${missing.length === 1 ? " does" : "s do"} not exist`,
+        detail: "A broken social link tells visitors the business is neglected, and it sends them away.",
+        fix: "Correct or remove each broken social link.",
+        evidence: missing.slice(0, 3).map((l) => ({ url: l.url, note: "the platform reports that this page does not exist" })),
+      });
+    }
 
     const dated = toRead
       .map((l, i) => ({ l, at: reads[i].lastActivityAt ? Date.parse(reads[i].lastActivityAt as string) : NaN }))

@@ -4,7 +4,9 @@ import { runTechnicalChecks } from "@/lib/checks/technical";
 import { runGeoChecks } from "@/lib/checks/geo";
 import { buildModuleResult } from "@/lib/scoring";
 import { extractSocialLinks } from "@/lib/social/platforms";
-import { normalizeTargetUrl } from "@/lib/url-guard";
+import { normalizeTargetUrl, registrableDomain } from "@/lib/url-guard";
+
+export { registrableDomain };
 import { wrapUntrusted } from "@/lib/injection";
 import { extractJson, type LlmClient } from "@/lib/llm/router";
 import type { SearchFn } from "@/lib/search/tavily";
@@ -42,6 +44,8 @@ export interface CompetitorDeps {
   search: SearchFn | null;
   fetchPage: PageFetcher;
   signal?: AbortSignal;
+  /** Asked before each competitor is fetched. False skips it. Used for the per-site rate limit. */
+  allowDomain?: (domain: string) => boolean;
 }
 
 const AnswerSchema = z.object({ competitors: z.array(z.unknown()) });
@@ -106,7 +110,8 @@ export async function findCompetitors(
   const candidates: { domain: string; source: "ai" | "search" }[] = [];
   const add = (raw: unknown, source: "ai" | "search") => {
     const domain = cleanDomain(raw, site.domain);
-    if (domain && !candidates.some((c) => c.domain === domain)) candidates.push({ domain, source });
+    // One candidate per site: a model steered at one victim must not fan out over its subdomains.
+    if (domain && !candidates.some((c) => registrableDomain(c.domain) === registrableDomain(domain))) candidates.push({ domain, source });
   };
 
   let aiFailure = "";
@@ -145,6 +150,7 @@ export async function findCompetitors(
   const rows: CompetitorRow[] = [];
   for (const candidate of candidates.slice(0, MAX_CANDIDATES)) {
     if (rows.length >= MAX_ROWS || deps.signal?.aborted) break;
+    if (deps.allowDomain && !deps.allowDomain(candidate.domain)) continue; // this site has been fetched enough lately
     try {
       // Home page, robots.txt, sitemap and llms.txt only: respects robots.txt and keeps this cheap.
       const { snapshot } = await collectSnapshot(new URL(`https://${candidate.domain}/`), deps.fetchPage, 0);

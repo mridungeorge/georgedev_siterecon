@@ -37,6 +37,8 @@ export interface RunDeps {
   fetchClient?: FetchClient | null;
   /** Optional free web search, used to find more competitors. */
   search?: SearchFn | null;
+  /** Asked before each competitor site is fetched. False skips it (the per-site rate limit). */
+  allowCompetitorDomain?: ((domain: string) => boolean) | null;
   /** Counts public Hacker News mentions of the domain. */
   mentions?: ((domain: string, signal?: AbortSignal) => Promise<number | null>) | null;
   /** Ends the scan early (the visitor left, or the scan ran out of time). */
@@ -208,7 +210,13 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
         geo: scoreOf("geo"),
         platforms: [...new Set((social?.profiles ?? []).filter((p) => p.kind === "profile").map((p) => p.platform))],
       },
-      { llm, search: deps.search ?? null, fetchPage: (url) => fetchPage(url, competitorSignal), signal: competitorSignal },
+      {
+        llm,
+        search: deps.search ?? null,
+        fetchPage: (url) => fetchPage(url, competitorSignal),
+        signal: competitorSignal,
+        allowDomain: deps.allowCompetitorDomain ?? undefined,
+      },
     );
     competitors = result.table;
     extraCouldntCheck.push(...result.couldntCheck);

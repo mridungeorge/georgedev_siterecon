@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { registrableDomain } from "./url-guard";
 
 // Same shape as RepoRecon's lib/rate-limit.ts (per-IP window plus a global daily cap),
 // with two differences: counters are stored in SQLite so a deploy restart does not
@@ -90,6 +91,25 @@ export function refundRateLimit(db: DatabaseSync, ip: string, domain: string, to
   db.prepare("DELETE FROM hits WHERE rowid IN (SELECT rowid FROM hits WHERE bucket = ? AND ts = ? LIMIT 1)")
     .run(`ip:${ip}`, token);
   db.prepare("INSERT INTO hits (bucket, ts) VALUES (?, ?)").run(`refund:${ip}`, token);
+}
+
+/**
+ * A separate allowance for fetching a site as a COMPETITOR. Competitors are chosen by a model that
+ * has read an attacker's page, so without this a hostile page could point SiteRecon at one victim
+ * over and over. It counts the whole site (a.victim.com and b.victim.com together), shares the
+ * per-target limit's number, and a refused attempt uses nothing.
+ */
+export function tryConsumeCompetitorFetch(
+  db: DatabaseSync,
+  host: string,
+  now: number = Date.now(),
+  cfg: RateLimitConfig = configFromEnv(),
+): boolean {
+  const bucket = `competitor:${registrableDomain(host)}`;
+  const row = db.prepare("SELECT COUNT(*) AS c FROM hits WHERE bucket = ? AND ts > ?").get(bucket, now - HOUR) as { c: number };
+  if (row.c >= cfg.perTargetHour) return false;
+  db.prepare("INSERT INTO hits (bucket, ts) VALUES (?, ?)").run(bucket, now);
+  return true;
 }
 
 // SECURITY NOTE (same as RepoRecon): x-forwarded-for is attacker-controlled unless the

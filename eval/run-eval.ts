@@ -16,7 +16,8 @@ async function main(): Promise<void> {
   console.log(`fixtures ${card.fixtures} | seeded problems found ${card.foundExpected}/${card.expectedFindings} (recall ${(card.recall * 100).toFixed(1)}%) | false positives ${card.falsePositives} | evidence valid ${card.evidenceValid} | deterministic ${card.deterministic}`);
   for (const failure of card.failures) console.log("  FAIL", failure);
 
-  if (card.recall < RECALL_FLOOR || card.falsePositives > 0 || !card.evidenceValid || !card.deterministic) {
+  // Any failure at all fails the gate, including a fixture with no ground truth.
+  if (card.recall < RECALL_FLOOR || card.falsePositives > 0 || !card.evidenceValid || !card.deterministic || card.failures.length > 0) {
     console.error("Eval gate FAILED");
     process.exit(1);
   }

@@ -12,8 +12,8 @@ export default function AccuracyPage() {
       <p className="mb-3 text-xs uppercase tracking-widest text-[var(--muted)]"><Link href="/">SiteRecon</Link> · accuracy</p>
       <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">How SiteRecon is tested</h1>
       <p className="mt-4 text-[var(--muted)]">
-        Every change runs the real audit over a set of small websites built to contain known problems, and the build fails if it misses
-        them or reports problems that are not there. These are the latest results.
+        Every change is checked by running the real audit over a set of small websites built to contain known problems, and the check fails if it
+        misses them or reports problems that are not there. These are the results that were committed with this version of the code.
       </p>
 
       <section className="mt-10">

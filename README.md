@@ -4,7 +4,7 @@ A free, public website audit. Paste an address and get a prioritised report on S
 
 It is a sibling of RepoRecon (`../georgedev_AI`) and follows its structure: a Next.js app that streams progress over SSE, per-visitor rate limits, an eval harness that gates CI, an `/accuracy` page, and a deploy to the same VM.
 
-**Everything runs on free tiers.** No paid service is required, and none can be reached by accident: every provider has a daily cap below its free limit, and exhausting one turns that part of the report into "couldn't check".
+**Everything runs on free tiers.** No paid service is required. The AI, PageSpeed and search providers each have a daily cap below their free limit, and exhausting one turns that part of the report into "couldn't check". The unauthenticated free services (GitHub's API, Jina Reader, yt-dlp, Hacker News) have no cap of their own: they are bounded only by the per-visitor and global scan limits, and they can rate-limit us, in which case that profile is reported as unreadable.
 
 ## What a report contains
 

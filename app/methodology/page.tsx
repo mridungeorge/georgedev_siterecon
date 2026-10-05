@@ -36,12 +36,23 @@ export default async function MethodologyPage() {
       <section className="mt-10">
         <h2 className="text-xl font-semibold">Where the data goes</h2>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm">
-          <li>Your site is fetched by SiteRecon itself, respecting robots.txt, with the user agent <code>SiteReconBot</code>.</li>
-          <li>Text from your homepage is sent to a free AI service (NVIDIA or Google) for the content review and the marketing ideas.</li>
+          <li>
+            Your pages are fetched by SiteRecon itself with the user agent <code>SiteReconBot</code>, respecting robots.txt. The optional browser step
+            then opens your homepage in Chromium, which identifies itself as an ordinary browser and does not check robots.txt for the files the page
+            itself loads.
+          </li>
+          <li>Text from your homepage is sent to a free AI service (NVIDIA or Google) for the content review, to name competitors, and to suggest marketing ideas.</li>
           <li>Your site address is sent to Google PageSpeed Insights for the speed measurements.</li>
-          <li>Public social profile addresses are sent to a reader service (Jina Reader) so the pages can be opened without logging in.</li>
-          <li>Your domain is sent to the Hacker News search to count public mentions, and to an optional web search to find competitors.</li>
-          <li>Reports are stored for 30 days, and a repeat scan of the same site within 24 hours reuses the stored report.</li>
+          <li>
+            Public social profile addresses are opened through GitHub&apos;s public API, yt-dlp (for YouTube) and Jina Reader (for everything else),
+            so they can be read without logging in.
+          </li>
+          <li>Your domain is sent to the Hacker News search to count public mentions, and to an optional web search (Tavily) to find competitors.</li>
+          <li>
+            Up to three competitor sites that the AI names are fetched (their homepage, robots.txt, sitemap and llms.txt), at most three times an
+            hour for any one site. The AI chooses them from your page, so treat them as suggestions.
+          </li>
+          <li>Reports are stored for 30 days, and a repeat scan of the same site within 24 hours reuses the stored report. Each finished scan is also logged, with your domain as a label, in a private MLflow.</li>
         </ul>
       </section>
 

@@ -42,6 +42,9 @@ def _is_ip_literal(host: str) -> bool:
     return True
 
 
+is_ip_literal = _is_ip_literal
+
+
 def host_is_public(host: str, resolver: Resolver = socket.getaddrinfo) -> bool:
     """True only if the name resolves, and every answer is a public address."""
     try:

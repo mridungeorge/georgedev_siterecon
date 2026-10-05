@@ -29,12 +29,12 @@
       "detail": "stopped after the timeout"
     },
     {
-      "name": "an obedient model that fails everything cannot plant text or move the score far",
+      "name": "an obedient model that fails everything cannot plant text, move the score far, or reach private names",
       "passed": true,
       "detail": "content score 100 -> 80"
     },
     {
-      "name": "an obedient model that passes everything cannot plant text or move the score far",
+      "name": "an obedient model that passes everything cannot plant text, move the score far, or reach private names",
       "passed": true,
       "detail": "content score 100 -> 100"
     },

@@ -25,7 +25,7 @@ Only `fetch` can fail a scan: with nothing to read there is nothing to audit. Ev
 | Connect-time address check | `lib/safe-fetch.ts` | Names that resolve to private, loopback or metadata addresses, including after redirects and DNS tricks |
 | Size, time and redirect caps | `lib/safe-fetch.ts` | Giant or never-ending responses |
 | robots.txt | `lib/robots.ts`, `lib/snapshot.ts` | Crawling a site that forbids it. A bot challenge is reported, not bypassed |
-| Per-visitor, per-target and global limits | `lib/rate-limit.ts` | Abuse, and using the tool to hit someone else's site |
+| Per-visitor, per-target and global limits | `lib/rate-limit.ts` | Abuse, and using the tool to hit someone else's site. Competitor sites, which a model picks from a page, have their own per-site allowance (`tryConsumeCompetitorFetch`) and count as one site per registrable domain |
 | Provider quota guards | `lib/quota.ts` | Spending beyond a free tier |
 | One scan at a time | `lib/scan-queue.ts` | Exhausting the 1 GB VM |
 | Cancellation | `lib/scan-handler.ts` | Work continuing after the visitor leaves |
@@ -33,11 +33,13 @@ Only `fetch` can fail a scan: with nothing to read there is nothing to audit. Ev
 | Evidence rule | `lib/checks/content.ts` | A model's claim counting without a verbatim quote from one field of the page |
 | Idea filter | `lib/ideas.ts` | Links, contact details or code planted in marketing ideas |
 | Shared secret | `fetch-service/app/main.py` | Anyone but the web app calling the Python service |
-| App-level and firewall egress rules | `fetch-service/app/netguard.py`, `deploy/vm/egress-rules.sh` | The browser reaching the metadata server or services on the VM |
+| Browser request filter (best effort) | `fetch-service/app/render.py` | Refuses private addresses, non-standard ports and WebSockets. It cannot see DNS rebinding or service workers, so it is not a boundary on its own |
+| Container firewall rules | `deploy/vm/egress-rules.sh` | The real boundary: the browser container cannot reach the metadata server, other machines, or services on the VM |
+| Hard render timeout | `fetch-service/app/render.py` (`run_hard`) | A page that never stops running JavaScript. Each render is its own process and is killed, with the browser it started, when it overruns |
 
 ## Why scores can be trusted
 
-Scores come from `lib/scoring.ts`: the share of check weight that passed. The only model-influenced points are 20 of the content module, and each needs a verified quote. `eval/` measures the fixed checks against hand-built sites and measures that a model which does exactly what a hostile page says cannot plant text or move a score past that bound.
+Scores come from `lib/scoring.ts`: the share of check weight that passed. The only model-influenced points are 20 of the content module, and each needs a verified quote. `eval/` measures the fixed checks against hand-built sites, and measures that a model which does exactly what a hostile page says cannot plant text, cannot make the tool fetch a private name, and cannot move the content score past that bound. It cannot stop a steered model from choosing which public site is compared as a competitor, which is why the report calls competitors suggestions.
 
 ## Scan budget (worst case)
 

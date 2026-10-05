@@ -3,6 +3,7 @@ import { runEval } from "../eval/core";
 import { runAdversarial } from "../eval/adversarial";
 import { FIXTURES } from "../eval/fixtures";
 import { TRUTH } from "../eval/ground-truth";
+import type { CheckOutcome } from "@/lib/pipeline/schemas";
 
 // These are the same floors the CI gate (npm run eval) enforces.
 const RECALL_FLOOR = 0.95;
@@ -30,9 +31,14 @@ describe("eval harness: accuracy on the hand-built fixture sites", () => {
   });
 
   it("fails when a check starts reporting problems that are not there", async () => {
-    const noisy = (): never[] => [];
+    // A check that invents a problem on every site: the exact fixtures must catch it.
+    const noisy = (): CheckOutcome[] => [{
+      id: "bogus", weight: 1, passed: false,
+      finding: { id: "geo:bogus", module: "geo", severity: "low", title: "t", detail: "d", fix: "f", effort: "low", evidence: [{ url: "https://x.test/", note: "n" }] },
+    }];
     const card = await runEval(FIXTURES, TRUTH, { modules: { geo: noisy } });
-    expect(card.failures.length).toBeGreaterThan(0);
+    expect(card.falsePositives).toBeGreaterThan(0);
+    expect(card.failures.some((f) => f.includes("unexpected geo:bogus"))).toBe(true);
   });
 });
 

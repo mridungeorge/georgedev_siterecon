@@ -42,6 +42,20 @@ export function normalizeTargetUrl(input: string): URL {
   return url;
 }
 
+/** Second-level suffixes where the registrable name has three labels, e.g. example.com.au. Not the full public suffix list. */
+const TWO_PART_SUFFIXES = new Set([
+  "co.uk", "org.uk", "ac.uk", "gov.uk", "com.au", "net.au", "org.au", "edu.au", "gov.au", "co.nz", "org.nz",
+  "co.za", "com.br", "com.mx", "co.jp", "co.in", "com.sg", "com.hk", "com.cn",
+]);
+
+/** The site a host belongs to: a.shop.victim.com and victim.com are both victim.com. An approximation, good enough to stop fanning out over subdomains. */
+export function registrableDomain(host: string): string {
+  const labels = host.toLowerCase().replace(/\.$/, "").split(".");
+  if (labels.length <= 2) return labels.join(".");
+  const lastTwo = labels.slice(-2).join(".");
+  return labels.slice(TWO_PART_SUFFIXES.has(lastTwo) ? -3 : -2).join(".");
+}
+
 /** The key used for per-target limits and the report cache. */
 export function targetDomain(url: URL): string {
   return url.hostname.replace(/^www\./, "");

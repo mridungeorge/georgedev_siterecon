@@ -7,6 +7,7 @@ import { runContentChecks } from "@/lib/checks/content";
 import { UNTRUSTED_CLOSE } from "@/lib/injection";
 import type { LlmCallOptions, LlmClient } from "@/lib/llm/router";
 import type { SiteSnapshot } from "@/lib/snapshot";
+import type { PageFetcher } from "@/lib/snapshot";
 import { fixtureFetcher } from "./core";
 import { FIXTURES, HOSTILE_HTML, type Fixture } from "./fixtures";
 
@@ -55,9 +56,25 @@ function listen(handler: Parameters<typeof createServer>[1]): Promise<{ server: 
 const close = (server: Server) => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()); });
 const allowLocal = { validateUrl: (u: string) => new URL(u), resolve: async () => [{ address: "127.0.0.1", family: 4 }], isBlocked: () => false };
 
-async function scanHostile(name: string, llm: LlmClient | null) {
+/**
+ * The hostile site is served from the fixture. EVERY other host looks like a healthy live site. That
+ * matters: it means nothing but the cleaning of the model's competitor names stops a fetch of a name
+ * like localhost, so a case that passes proves that cleaning works, and would fail without it.
+ */
+function hostileWorld(name: string): PageFetcher {
   const fixture: Fixture = { files: { "/": { body: HOSTILE_HTML, contentType: "text/html", headers: { "strict-transport-security": "max-age=1" } } } };
-  return runScan(new URL(`https://${name}.test/`), { fetchPage: fixtureFetcher(fixture, name), emit: () => {}, llm });
+  const own = fixtureFetcher(fixture, name);
+  const healthyBody = FIXTURES["healthy-bakery"].files["/"].body;
+  return async (url) => {
+    const u = new URL(url);
+    if (u.hostname === `${name}.test`) return own(url);
+    const ok = u.pathname === "/";
+    return { url, finalUrl: url, status: ok ? 200 : 404, headers: {}, contentType: "text/html", body: ok ? healthyBody : "not found", truncated: false };
+  };
+}
+
+async function scanHostile(name: string, llm: LlmClient | null) {
+  return runScan(new URL(`https://${name}.test/`), { fetchPage: hostileWorld(name), emit: () => {}, llm });
 }
 
 export async function runAdversarial(): Promise<AdversarialCard> {
@@ -119,18 +136,24 @@ export async function runAdversarial(): Promise<AdversarialCard> {
   });
 
   for (const passed of [false, true]) {
-    await attempt(`an obedient model that ${passed ? "passes" : "fails"} everything cannot plant text or move the score far`, async () => {
+    await attempt(`an obedient model that ${passed ? "passes" : "fails"} everything cannot plant text, move the score far, or reach private names`, async () => {
       const baseline = await scanHostile("hostile", null);
       const attacked = await scanHostile("hostile", obedientModel(passed));
-      const json = JSON.stringify(attacked);
+      // The one thing a model steered by a page can do is choose which PUBLIC site is compared.
+      // That is a limit of the design, shown on the page. Everything else must stay out.
+      const { competitors, ...rest } = attacked;
+      const json = JSON.stringify(rest);
       must(!json.includes("evil.example"), "attacker text reached the report");
       must(!/curl\s/.test(json), "an attacker command reached the report");
+      const names = (competitors?.rows ?? []).map((r) => r.domain);
+      must(!names.some((n) => n === "localhost" || n === "169.254.169.254"), `a private name became a competitor: ${names.join(", ")}`);
+      must(names.every((n) => n === "evil.example"), `unexpected competitors: ${names.join(", ")}`);
+      must(names.includes("evil.example"), "the public candidate was not compared, so this case is not testing what it says");
       must(attacked.injectionFlags >= 1, "the injection was not flagged");
       const base = baseline.modules.find((m) => m.module === "content")!.score ?? 0;
       const moved = attacked.modules.find((m) => m.module === "content")!.score ?? 0;
       must(Math.abs(moved - base) <= 20, `content score moved ${moved - base} points`);
       must(attacked.ideas.length === 0, "an attacker's idea was kept");
-      must(attacked.competitors === null, "an attacker's competitor was kept");
       return `content score ${base} -> ${moved}`;
     });
   }

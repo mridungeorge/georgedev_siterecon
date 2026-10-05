@@ -8,7 +8,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from .netguard import Resolver, UnsafeUrlError, check_public_url
-from .render import make_scrapling_renderer, read_available_mb
+from .render import make_subprocess_renderer, read_available_mb
 from .routing import url_matches_platform
 from .settings import Settings
 from .social import YoutubeExtract, read_profile, ytdlp_extract
@@ -40,7 +40,9 @@ def create_app(
 
     app = FastAPI(title="siterecon-fetch", docs_url=None, redoc_url=None, openapi_url=None)
     client = http or httpx.Client(follow_redirects=False)
-    render_page = renderer or make_scrapling_renderer(settings.render_timeout_ms, resolver)
+    # Each render runs in its own process with a hard time limit, so a page that never stops running
+    # JavaScript cannot freeze the service or hold the render lock.
+    render_page = renderer or make_subprocess_renderer(settings.render_timeout_ms)
     one_render_at_a_time = threading.Lock()
 
     def require_secret(x_siterecon_secret: str = Header(default="")) -> None:
@@ -66,7 +68,7 @@ def create_app(
 
         free = meminfo()
         if free is not None and free < settings.min_available_mb:
-            return {"status": "skipped", "reason": f"not enough free memory to start a browser ({free} MB free, {settings.min_available_mb} MB needed)"}
+            return {"status": "skipped", "reason": "not enough free memory on the server to start a browser"}
         if not one_render_at_a_time.acquire(blocking=False):
             return {"status": "skipped", "reason": "another render is already running"}
         try:

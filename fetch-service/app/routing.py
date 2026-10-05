@@ -5,6 +5,7 @@ where it has a channel for the platform. Either one refusing is enough to reject
 """
 
 import importlib
+import re
 from urllib.parse import urlsplit
 
 PLATFORM_HOSTS = {
@@ -48,6 +49,11 @@ def url_matches_platform(platform: str, url: str) -> bool:
     hosts = PLATFORM_HOSTS.get(platform)
     if hosts is None or len(url) > MAX_URL_LENGTH:
         return False
+    # Python and a browser read a backslash in a host differently: "evil.example\.facebook.com" looks
+    # like a facebook.com host to urlsplit and like evil.example to the reader that opens it. Percent
+    # escapes and non-ASCII characters are refused for the same reason. Real profile URLs need none.
+    if "\\" in url or "%" in url or not url.isascii():
+        return False
     try:
         parts = urlsplit(url)
         host = (parts.hostname or "").lower()
@@ -55,6 +61,8 @@ def url_matches_platform(platform: str, url: str) -> bool:
     except ValueError:
         return False
     if parts.scheme != "https" or parts.username or parts.password or port not in (None, 443):
+        return False
+    if not re.fullmatch(r"[a-z0-9.-]+", host):
         return False
     if not any(host == h or host.endswith("." + h) for h in hosts):
         return False
