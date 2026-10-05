@@ -86,6 +86,32 @@ export default function ReportView({ report }: { report: Report }) {
           : <ol className="space-y-3">{report.topFixes.map((f) => <FindingCard key={f.id} f={f} />)}</ol>}
       </section>
 
+      {report.ideas.length > 0 && (
+        <section>
+          <h3 className="mb-1 text-xl font-semibold">Marketing ideas</h3>
+          <p className="mb-3 text-sm text-[var(--muted)]">Each idea is tied to a problem found above.</p>
+          <ul className="space-y-3">
+            {report.ideas.map((idea, i) => (
+              <li key={i} className="border border-[var(--line)] p-4">
+                <div className="mb-1 text-xs uppercase tracking-wide text-[var(--muted)]">{idea.effort} effort</div>
+                <h4 className="font-semibold">{idea.title}</h4>
+                <p className="mt-1 text-sm text-[var(--muted)]">{idea.why}</p>
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  Addresses: {report.topFixes.find((f) => f.id === idea.findingId)?.title ?? idea.findingId}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {report.injectionFlags > 0 && (
+        <p className="border border-[var(--line)] p-4 text-sm text-[var(--warn)]">
+          This site&apos;s text contains {report.injectionFlags} instruction-like passage{report.injectionFlags === 1 ? "" : "s"} aimed
+          at AI tools. SiteRecon treated them as ordinary text and did not follow them.
+        </p>
+      )}
+
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-xl font-semibold">Fix with Claude</h3>

@@ -54,6 +54,8 @@ export const ReportSchema = z.object({
   couldntCheck: z.array(CouldntCheckSchema),
   pagesScanned: z.array(z.string()),
   injectionFlags: z.number().int().min(0),
+  // Reports stored before marketing ideas existed have none, so they still load.
+  ideas: z.array(IdeaSchema).default([]),
 });
 
 export type ModuleName = z.infer<typeof ModuleNameSchema>;

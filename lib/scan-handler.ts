@@ -7,11 +7,16 @@ import { BlockedByRobotsError, NotHtmlError, TargetUnreachableError, type PageFe
 import { BlockedAddressError } from "./safe-fetch";
 import { runScan } from "./pipeline/run";
 import type { ScanQueue } from "./scan-queue";
+import type { LlmClient } from "./llm/router";
+import type { PageSpeedDeps } from "./checks/performance";
 
 export interface ScanDeps {
   db: DatabaseSync;
   fetchPage: PageFetcher;
   queue: ScanQueue;
+  /** Free-tier AI and PageSpeed. Leave out to scan without them. */
+  llm?: LlmClient | null;
+  pagespeed?: PageSpeedDeps | null;
   now?: () => number;
   scanTimeoutMs?: number;
   heartbeatMs?: number;
@@ -126,7 +131,7 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
             reject(new Error("The scan took too long and was stopped."));
           }, deps.scanTimeoutMs ?? SCAN_TIMEOUT_MS);
         });
-        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)) });
+        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed });
         const report = await Promise.race([scan, timeout]);
         saveReport(deps.db, report);
         purgeExpiredReports(deps.db, now());

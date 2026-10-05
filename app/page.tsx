@@ -5,7 +5,9 @@ import { useScanStream } from "@/lib/useScanStream";
 import { STEPS, type StepName } from "@/lib/pipeline/steps";
 import ReportView from "@/components/ReportView";
 
-const STEP_LABEL: Record<StepName, string> = { fetch: "Read site", technical: "SEO", geo: "AI visibility", synthesis: "Report" };
+const STEP_LABEL: Record<StepName, string> = {
+  fetch: "Read site", technical: "SEO", geo: "AI visibility", content: "Content", performance: "Speed", synthesis: "Report",
+};
 
 export default function Home() {
   const { state, run, reset } = useScanStream();

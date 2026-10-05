@@ -7,7 +7,7 @@ import type { Report } from "@/lib/pipeline/schemas";
 const T0 = Date.parse("2026-10-05T00:00:00.000Z");
 const report = (id: string, createdAt: number, domain = "example.com"): Report => ({
   id, url: `https://${domain}/`, domain, createdAt: new Date(createdAt).toISOString(), overallScore: 70,
-  modules: [], topFixes: [], fixPrompt: "p", couldntCheck: [], pagesScanned: [`https://${domain}/`], injectionFlags: 0,
+  modules: [], topFixes: [], fixPrompt: "p", couldntCheck: [], pagesScanned: [`https://${domain}/`], injectionFlags: 0, ideas: [],
 });
 let db: DatabaseSync;
 beforeEach(() => { db = openDb(":memory:"); });

@@ -21,13 +21,15 @@ describe("runScan", () => {
       "step-start:fetch", "step-done:fetch",
       "step-start:technical", "step-done:technical",
       "step-start:geo", "step-done:geo",
+      "step-start:content", "step-done:content",
+      "step-start:performance", "step-warn:performance", // PageSpeed is not configured in this test
       "step-start:synthesis", "step-done:synthesis",
     ]);
     expect(() => ReportSchema.parse(report)).not.toThrow();
     expect(report.id).toBe("id-1");
     expect(report.domain).toBe("example.com");
     expect(report.pagesScanned).toEqual([`${O}/`, `${O}/about`]);
-    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo"]);
+    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance"]);
     expect(report.overallScore).toBeGreaterThan(0);
     expect(report.topFixes.length).toBeGreaterThan(0);
     expect(report.topFixes.length).toBeLessThanOrEqual(10);
