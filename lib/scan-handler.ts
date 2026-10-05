@@ -24,7 +24,7 @@ function sse(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-/** A failure that was the target's doing, not the visitor's, so the scan is given back. */
+/** A failure that was the target's doing, not the visitor's, so the visitor's own scan is given back. */
 function isRefundable(err: unknown): boolean {
   return err instanceof TargetUnreachableError || err instanceof NotHtmlError ||
     err instanceof BlockedByRobotsError || err instanceof BlockedAddressError || err instanceof InvalidTargetError;
@@ -45,7 +45,10 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
 
   let target: URL;
   try {
-    target = normalizeTargetUrl(new URL(req.url).searchParams.get("url") ?? "");
+    // SiteRecon audits a site, not a page. Always scanning the root also means the cache
+    // key (the domain) always describes what was actually scanned, so a visitor cannot
+    // plant a report for /nope as the cached report for the whole site.
+    target = new URL("/", normalizeTargetUrl(new URL(req.url).searchParams.get("url") ?? ""));
   } catch (err) {
     return json(400, { error: err instanceof InvalidTargetError ? err.message : "That does not look like a valid website address." });
   }
@@ -79,17 +82,26 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
 
   const token = commitRateLimit(deps.db, ip, domain, now());
 
+  // One abort signal covers every way a scan can stop early: the visitor leaving, the
+  // time ceiling, or the scan finishing. Aborting it cancels in-flight requests to the
+  // audited site, and the queue slot is only handed on once the scan has really stopped.
+  const abort = new AbortController();
+  const aborted = new Promise<never>((_, reject) => {
+    abort.signal.addEventListener("abort", () => reject(new Error("The scan was cancelled.")), { once: true });
+  });
+  aborted.catch(() => {}); // only ever observed through the races below
+  const fetchPage: PageFetcher = (url) =>
+    abort.signal.aborted
+      ? Promise.reject(new Error("The scan was cancelled."))
+      : Promise.race([deps.fetchPage(url, abort.signal), aborted]);
+
   let open = true;
-  let disconnect: (err: Error) => void = () => {};
-  const disconnected = new Promise<never>((_, reject) => { disconnect = reject; });
-  disconnected.catch(() => {}); // handled through the race below
 
   return stream(new ReadableStream({
-    // Runs when the visitor closes the connection. The scan stops waiting and the queue
-    // slot is freed. Requests already in flight end on their own 15-second timeouts.
+    // Runs when the visitor closes the connection.
     cancel() {
       open = false;
-      disconnect(new Error("The visitor disconnected."));
+      abort.abort();
     },
     async start(controller) {
       const send = (chunk: string) => {
@@ -103,17 +115,19 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
       const heartbeat = setInterval(() => send(": ping\n\n"), deps.heartbeatMs ?? HEARTBEAT_MS);
       let timer: ReturnType<typeof setTimeout> | undefined;
       let release: (() => void) | undefined;
+      let scan: ReturnType<typeof runScan> | undefined;
 
       try {
         release = await slot;
+        if (abort.signal.aborted) return; // the visitor left while waiting in the queue: do not start
         const timeout = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error("The scan took too long and was stopped.")), deps.scanTimeoutMs ?? SCAN_TIMEOUT_MS);
+          timer = setTimeout(() => {
+            abort.abort();
+            reject(new Error("The scan took too long and was stopped."));
+          }, deps.scanTimeoutMs ?? SCAN_TIMEOUT_MS);
         });
-        const report = await Promise.race([
-          runScan(target, { fetchPage: deps.fetchPage, emit: (e) => send(sse(e.event, e.data)) }),
-          timeout,
-          disconnected,
-        ]);
+        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)) });
+        const report = await Promise.race([scan, timeout]);
         saveReport(deps.db, report);
         purgeExpiredReports(deps.db, now());
         send(sse("report", report));
@@ -123,6 +137,8 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
       } finally {
         clearInterval(heartbeat);
         clearTimeout(timer);
+        abort.abort();
+        await scan?.catch(() => {}); // wait for the scan to stop before freeing the slot
         release?.();
         if (open) controller.close();
       }

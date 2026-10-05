@@ -4,7 +4,7 @@ import { isAllowed, parseRobots, type RobotsRules } from "./robots";
 import { targetDomain } from "./url-guard";
 import type { CouldntCheck } from "./pipeline/schemas";
 
-export type PageFetcher = (url: string) => Promise<SafeResponse>;
+export type PageFetcher = (url: string, signal?: AbortSignal) => Promise<SafeResponse>;
 
 export interface SiteSnapshot {
   origin: string;
@@ -84,6 +84,19 @@ export async function collectSnapshot(
   } catch (err) {
     throw new TargetUnreachableError(
       `Couldn't reach ${target.hostname}. Check the address is right and the site is online. (${(err as Error).message})`,
+    );
+  }
+  // A bot challenge or an outage page is not the site. Auditing it would score the error
+  // page, and the report would be cached as if it were the real thing. SiteRecon does not
+  // try to get around bot protection, so a block is reported as one.
+  if (home.status === 401 || home.status === 403 || home.status === 429) {
+    throw new TargetUnreachableError(
+      `${target.hostname} blocks automated access (HTTP ${home.status}), so SiteRecon could not scan it. SiteRecon does not try to get around bot protection.`,
+    );
+  }
+  if (home.status >= 400) {
+    throw new TargetUnreachableError(
+      `${target.hostname} returned an error (HTTP ${home.status}) instead of its homepage. Try again once the site is working.`,
     );
   }
   if (!home.contentType.includes("html")) {

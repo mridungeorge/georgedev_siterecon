@@ -95,7 +95,9 @@ describe("handleScan", () => {
     const last = evs.at(-1)!;
     expect(last.event).toBe("error");
     expect(last.data.message).toMatch(/not a web page/);
-    expect(db.prepare("SELECT COUNT(*) AS c FROM hits").get()).toEqual({ c: 0 });
+    // The visitor's own scan is given back. The request to the target really was sent, so the
+    // global and per-target hits stay (see review-fixes.test.ts for the full contract).
+    expect(db.prepare("SELECT COUNT(*) AS c FROM hits WHERE bucket = ?").get(`ip:${IP}`)).toEqual({ c: 0 });
     expect(peekRateLimit(db, IP, "example.com").allowed).toBe(true);
   });
 

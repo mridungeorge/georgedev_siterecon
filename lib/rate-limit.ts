@@ -8,6 +8,9 @@ import type { DatabaseSync } from "node:sqlite";
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
+/** How many refunded (failed or blocked-target) scans one visitor may have per hour. */
+export const REFUND_LIMIT_PER_HOUR = 20;
+
 export interface RateLimitConfig {
   perIpHour: number;
   perIpDay: number;
@@ -55,6 +58,9 @@ export function peekRateLimit(
     [`ip:${ip}`, HOUR, cfg.perIpHour, "per-ip"],
     [`ip:${ip}`, DAY, cfg.perIpDay, "per-ip-daily"],
     [`target:${domain}`, HOUR, cfg.perTargetHour, "per-target"],
+    // Refunds are not free: a visitor who keeps pointing the tool at dead or non-page
+    // targets still ties up the single scan slot, so refunded scans are capped too.
+    [`refund:${ip}`, HOUR, REFUND_LIMIT_PER_HOUR, "per-ip"],
   ];
   for (const [bucket, windowMs, limit, reason] of rules) {
     const row = count.get(bucket, now - windowMs) as { c: number; oldest: number | null };
@@ -73,12 +79,17 @@ export function commitRateLimit(db: DatabaseSync, ip: string, domain: string, no
   return now;
 }
 
-/** Gives a scan back, for when the target turned out to be unreachable or not a web page. */
+/**
+ * Gives the visitor their scan back when the target turned out to be unreachable, blocked
+ * or not a web page. Only the visitor's own bucket is refunded. The global and per-target
+ * hits stay, because the request to the third-party site really was sent, and the refund
+ * is itself counted so it cannot be used for unlimited free scans.
+ */
 export function refundRateLimit(db: DatabaseSync, ip: string, domain: string, token: number): void {
-  const remove = db.prepare(
-    "DELETE FROM hits WHERE rowid IN (SELECT rowid FROM hits WHERE bucket = ? AND ts = ? LIMIT 1)",
-  );
-  for (const bucket of buckets(ip, domain)) remove.run(bucket, token);
+  void domain;
+  db.prepare("DELETE FROM hits WHERE rowid IN (SELECT rowid FROM hits WHERE bucket = ? AND ts = ? LIMIT 1)")
+    .run(`ip:${ip}`, token);
+  db.prepare("INSERT INTO hits (bucket, ts) VALUES (?, ?)").run(`refund:${ip}`, token);
 }
 
 // SECURITY NOTE (same as RepoRecon): x-forwarded-for is attacker-controlled unless the

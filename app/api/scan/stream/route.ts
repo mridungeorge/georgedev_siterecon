@@ -11,5 +11,5 @@ export const maxDuration = 400;
 const queue = new ScanQueue(1, 5);
 
 export function GET(req: Request) {
-  return handleScan(req, { db: getDb(), queue, fetchPage: (url) => safeFetch(url) });
+  return handleScan(req, { db: getDb(), queue, fetchPage: (url, signal) => safeFetch(url, { signal }) });
 }
