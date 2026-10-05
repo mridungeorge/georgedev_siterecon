@@ -8,6 +8,7 @@ import json
 import os
 import socket
 import sys
+import traceback
 
 from .render import make_scrapling_renderer
 
@@ -20,6 +21,7 @@ def main(argv: list[str]) -> int:
     try:
         result = make_scrapling_renderer(timeout_ms, socket.getaddrinfo)(argv[1])
     except Exception as exc:  # the parent only needs to know it failed
+        traceback.print_exc(file=sys.stderr)  # the parent keeps the tail of this for the server log
         print(json.dumps({"error": type(exc).__name__}))
         return 1
     print(json.dumps(result))

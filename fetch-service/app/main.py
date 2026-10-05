@@ -1,7 +1,9 @@
 import hmac
+import logging
 import socket
 import threading
 from typing import Callable, Literal
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -12,6 +14,8 @@ from .render import make_subprocess_renderer, read_available_mb
 from .routing import url_matches_platform
 from .settings import Settings
 from .social import YoutubeExtract, read_profile, ytdlp_extract
+
+log = logging.getLogger("siterecon.fetch")
 
 Platform = Literal["facebook", "instagram", "x", "linkedin", "youtube", "tiktok", "pinterest", "github"]
 
@@ -74,7 +78,10 @@ def create_app(
         try:
             measured = render_page(body.url)
             return {"status": "ok", "words": int(measured["words"]), "mobileOverflow": bool(measured["mobileOverflow"])}
-        except Exception:
+        except Exception as exc:
+            # The caller gets a generic reason. The cause goes to the server log, with the host only
+            # (a URL can carry a query string that should not be written down).
+            log.warning("render of %s failed: %s %s", urlsplit(body.url).hostname, type(exc).__name__, getattr(exc, "detail", "") or exc)
             return {"status": "skipped", "reason": "the browser could not render the page"}
         finally:
             one_render_at_a_time.release()

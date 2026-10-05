@@ -25,7 +25,11 @@ def read_available_mb() -> int | None:
 
 
 class RenderError(RuntimeError):
-    pass
+    def __init__(self, message: str, detail: str = ""):
+        super().__init__(message)
+        # What actually went wrong, for the server's own log. It is never sent back to the caller,
+        # because it can contain paths and page-controlled text.
+        self.detail = detail
 
 
 def request_allowed(url: str, resolver: Resolver) -> bool:
@@ -62,23 +66,24 @@ def run_hard(command: list[str], timeout_s: float, *, env: dict | None = None, c
     A page that never stops running JavaScript freezes a browser from the inside, and a timeout
     inside the browser's own API cannot interrupt it. Killing the whole process tree from outside can.
     """
-    options: dict = {"stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL, "text": True, "env": env, "cwd": cwd}
+    options: dict = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE, "text": True, "env": env, "cwd": cwd}
     if os.name == "posix":
         options["start_new_session"] = True
     else:
         options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     proc = subprocess.Popen(command, **options)
     try:
-        out, _ = proc.communicate(timeout=timeout_s)
+        out, err = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired:
         _kill_tree(proc)
         try:
             proc.communicate(timeout=5)
         except Exception:
             pass
-        raise RenderError("the browser took too long and was stopped") from None
+        raise RenderError("the browser took too long and was stopped", detail=f"timed out after {timeout_s:.0f} s") from None
     if proc.returncode != 0:
-        raise RenderError("the browser could not render the page")
+        tail = f"{err or ''}\n{out or ''}".strip()[-600:]
+        raise RenderError("the browser could not render the page", detail=f"exit code {proc.returncode}: {tail}")
     return out
 
 
