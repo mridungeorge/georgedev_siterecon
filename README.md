@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SiteRecon
 
-## Getting Started
+A free, public website audit. Paste an address and get a prioritised report on SEO, how well AI search can read the site, content and conversion, speed, public social presence and nearest competitors, plus a prompt you can hand to Claude to fix what was found.
 
-First, run the development server:
+It is a sibling of RepoRecon (`../georgedev_AI`) and follows its structure: a Next.js app that streams progress over SSE, per-visitor rate limits, an eval harness that gates CI, an `/accuracy` page, and a deploy to the same VM.
+
+**Everything runs on free tiers.** No paid service is required, and none can be reached by accident: every provider has a daily cap below its free limit, and exhausting one turns that part of the report into "couldn't check".
+
+## What a report contains
+
+| Part | How it is produced |
+|---|---|
+| SEO (18 checks) | A plain fetch of the homepage, robots.txt, sitemap and headers. No AI. |
+| AI visibility (9 checks) | AI crawler rules, the text in the raw HTML, structured data. With the browser step, proof when content only appears after JavaScript runs. |
+| Content and conversion | 80 points of fixed checks. A small AI review can move 20 points, and only by quoting a specific passage that is really on the page. |
+| Speed | Google PageSpeed Insights (mobile lab data). Needs a free key. |
+| Social | Links found on the homepage, then each public profile opened without logging in. |
+| Competitors | Suggested by AI, then each is fetched to prove it is a live site, and measured with the same checks. |
+| Marketing ideas | AI-written, each tied to a real finding. Ideas with links, emails, phone numbers or code are dropped. |
+| Fix prompt | Built in code from the findings, never written by a model. |
+
+Scores are computed in code from a fixed rubric (`/methodology` is generated from the checks themselves). A model never sets a score.
+
+## Run it
+
+Needs Node 22.13 or newer (it uses the built-in `node:sqlite`).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env.local   # every key is optional
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+With no keys the SEO, AI-visibility, content (fixed part) and social-link checks all work. Add keys to switch on the rest:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Switches on | Where to get it |
+|---|---|---|
+| `NVIDIA_NIM_API_KEY` / `GEMINI_API_KEY` | Content review, competitor discovery, marketing ideas | build.nvidia.com / aistudio.google.com. Use a Google project with billing off. |
+| `PAGESPEED_API_KEY` | Speed module | Google Cloud, PageSpeed Insights API. Free. |
+| `TAVILY_API_KEY` | More competitors from web search | tavily.com. 1,000 free credits a month, no card. |
+| `FETCH_SERVICE_URL` + `FETCH_SERVICE_SECRET` | Opening social profiles, the browser step | The Python service in `fetch-service/` |
+| `MLFLOW_URL` | One MLflow run logged per scan | The MLflow RepoRecon already uses |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### The Python fetch service (optional)
 
-## Learn More
+```bash
+cd fetch-service
+python -m venv .venv && .venv/Scripts/pip install -r requirements-dev.txt   # Scripts -> bin on Linux/macOS
+.venv/Scripts/python -m playwright install chromium
+FETCH_SERVICE_SECRET=change-me .venv/Scripts/python -m uvicorn --factory app.main:build --port 8787
+```
 
-To learn more about Next.js, take a look at the following resources:
+It reads public social pages (GitHub API, yt-dlp for YouTube, Jina Reader for the rest, using Agent-Reach for URL routing) and renders the homepage in headless Chromium with Scrapling. It refuses to start without a secret, and every endpoint requires it.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tests and checks
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm test                  # unit and integration tests (vitest)
+npm run eval              # accuracy on the fixture sites; fails below the floor
+npm run eval:adversarial  # attacks on the tool itself; fails if any case stops holding
+npx tsc --noEmit && npm run lint && npm run build
+cd fetch-service && python -m pytest -q
+```
 
-## Deploy on Vercel
+## Deploy
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+See [`docs/DEPLOY.md`](docs/DEPLOY.md). The files are written and checked for syntax, but they have not been run against a real VM, and the container image has not been built (see the status section there).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Layout
+
+```
+app/              pages (/, /r/[id], /methodology, /accuracy) and API (/api/scan/stream, /api/report/[id], /api/accuracy)
+lib/              url-guard, safe-fetch, rate-limit, quota, scan-handler, scan-queue, snapshot, robots, scoring, fix-prompt
+  checks/         technical, geo, content, performance, social
+  pipeline/       run.ts (the steps), schemas.ts
+  llm/            router.ts (NVIDIA NIM, then Gemini)
+  social/         platform classification
+  observability/  mlflow.ts
+fetch-service/    the Python service (FastAPI, Scrapling, Agent-Reach, yt-dlp)
+eval/             fixture sites, ground truth, adversarial cases, scorecards
+deploy/vm/        VM setup, egress rules and their self-check, systemd unit, Caddy snippet
+docs/             PRD (the spec), ARCHITECTURE, DEPLOY, ROADMAP, agent-system-prompts
+```
+
+Spec: [`docs/PRD.md`](docs/PRD.md).
