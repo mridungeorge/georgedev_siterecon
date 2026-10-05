@@ -1,0 +1,49 @@
+name: Deploy to VM
+
+# Same pattern as RepoRecon's deploy.yml: authenticate to Google Cloud without a stored key
+# (Workload Identity Federation), SSH to the VM, update, restart, and check it came back.
+#
+# Set these under Settings > Secrets and variables > Actions before the first run:
+#   Variables: GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT, GCP_VM_NAME, GCP_VM_ZONE, DEPLOY_USER
+#   Secret:    GCP_SSH_PRIVATE_KEY
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [master]
+    types: [completed]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    # Only deploy a commit whose tests passed.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for Workload Identity Federation
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - id: deploy
+        uses: google-github-actions/ssh-compute@v2
+        with:
+          instance_name: ${{ vars.GCP_VM_NAME }}
+          zone: ${{ vars.GCP_VM_ZONE }}
+          ssh_private_key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
+          # Connect straight to the VM's external address, as RepoRecon's workflow does.
+          flags: "--no-tunnel-through-iap"
+          command: |
+            sudo -u ${{ vars.DEPLOY_USER }} -i bash -c 'cd ~/siterecon && git pull --ff-only && npm ci && npm run build' && \
+            sudo systemctl restart siterecon && \
+            sudo -u ${{ vars.DEPLOY_USER }} -i bash -c 'cd ~/siterecon && GITHUB_OWNER=${{ github.repository_owner }} bash deploy/vm/run-fetch.sh' && \
+            sleep 5 && \
+            curl -sf http://127.0.0.1:3001/api/accuracy > /dev/null && echo DEPLOY_OK
+
+      - name: Show deploy output
+        run: |
+          echo '${{ steps.deploy.outputs.stdout }}'
+          echo '${{ steps.deploy.outputs.stderr }}'

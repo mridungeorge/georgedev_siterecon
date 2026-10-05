@@ -50,3 +50,4 @@ fetch-service/.venv/
 fetch-service/__pycache__/
 fetch-service/**/__pycache__/
 fetch-service/.pytest_cache/
+.browsers/

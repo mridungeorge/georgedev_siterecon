@@ -1,0 +1,30 @@
+name: Build fetch service image
+
+# Same idea as RepoRecon's build-sandbox.yml: build the container image in CI and publish it to
+# GitHub's free container registry, so the VM only has to pull it.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "fetch-service/**"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: fetch-service
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/siterecon-fetch:latest

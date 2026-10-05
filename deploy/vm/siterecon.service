@@ -1,0 +1,25 @@
+# systemd unit for the SiteRecon web app, modelled on RepoRecon's. deploy/vm/setup.sh fills in
+# __DEPLOY_USER__ and installs it as /etc/systemd/system/siterecon.service.
+[Unit]
+Description=SiteRecon web app
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=__DEPLOY_USER__
+WorkingDirectory=/home/__DEPLOY_USER__/siterecon
+EnvironmentFile=/etc/siterecon/siterecon.env
+Environment=NODE_ENV=production
+# The VM has 1 GB in total and RepoRecon runs on it too, so keep this app small.
+Environment=NODE_OPTIONS=--max-old-space-size=256
+ExecStart=/usr/bin/env npm start -- --port 3001 --hostname 127.0.0.1
+Restart=on-failure
+RestartSec=5
+MemoryMax=320M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/home/__DEPLOY_USER__/siterecon/data
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+# Add this block to the VM's Caddyfile (the same one that serves reporecon.georgemridun.dev),
+# then run: sudo systemctl reload caddy
+#
+# "header_up X-Forwarded-For {remote_host}" REPLACES whatever the visitor sent with the address
+# Caddy actually saw. SiteRecon's per-visitor rate limits trust that header (TRUST_PROXY=true), so
+# this line is what stops a visitor from forging a fresh identity on every request.
+siterecon.georgemridun.dev {
+	reverse_proxy 127.0.0.1:3001 {
+		header_up X-Forwarded-For {remote_host}
+		header_up -X-Real-IP
+		flush_interval -1   # lets the scan progress stream through without buffering
+	}
+}

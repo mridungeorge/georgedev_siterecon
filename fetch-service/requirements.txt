@@ -1,0 +1,9 @@
+# Exact versions that the tests ran against (Python 3.14 locally, 3.12 in the container).
+fastapi==0.142.2
+uvicorn==0.54.0
+httpx==0.28.1
+pydantic==2.13.5
+scrapling[fetchers]==0.4.15
+yt-dlp==2026.8.19
+# Used for URL routing only (its channels' can_handle). Pinned to the commit that was tested.
+agent-reach @ git+https://github.com/Panniantong/Agent-Reach.git@a19a171fa980a0785849596492e0af4db800c82f
