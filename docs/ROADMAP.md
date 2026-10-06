@@ -12,9 +12,9 @@
 
 ## Written but not run
 
-These need a real VM or Docker, which were not available during the build.
+These need a real VM, which was not available during the build.
 
-- `fetch-service/Dockerfile` has not been built, and the hardened `docker run` flags in `deploy/vm/run-fetch.sh` have not been tried (Chromium running with `--cap-drop=ALL` and a read-only filesystem is the part most likely to need adjusting).
+- The fetch service image was built and run on 2026-10-06 with the hardened flags from `deploy/vm/run-fetch.sh` (non-root, `--read-only`, `--cap-drop=ALL`, no-new-privileges, pid, memory and CPU limits). Chromium rendered real pages inside it, and loopback, metadata and IP-literal addresses were refused. That run found one bug, fixed in the Dockerfile: the app user has no home directory, so Chromium died at launch until `HOME=/tmp` was set. Not yet tried on the VM itself: the iptables egress rules, and the Docker build on a 1 GB e2-micro.
 - `deploy/vm/setup.sh`, `egress-rules.sh` and `verify-egress.sh` have only been syntax-checked.
 - The GitHub workflows have never run. `deploy.yml` needs the variables listed at its top.
 
