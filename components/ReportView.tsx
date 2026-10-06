@@ -2,215 +2,256 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Finding, ModuleResult, Report } from "@/lib/pipeline/schemas";
+import { reportToMarkdown } from "@/lib/report-markdown";
+
+// Laid out like RepoRecon's report: numbered section labels, one collapsible card per finding with a
+// severity bar, and the same colours. Every piece of text here comes from the audited site or a model,
+// and is rendered as React text, never as HTML.
 
 const MODULE_LABEL: Record<ModuleResult["module"], string> = {
   technical: "SEO", geo: "AI visibility", content: "Content and conversion",
-  social: "Social", competitors: "Competitors", performance: "Performance",
+  social: "Social", competitors: "Competitors", performance: "Speed",
 };
 const SEVERITY_COLOR: Record<Finding["severity"], string> = {
-  critical: "var(--bad)", high: "var(--bad)", medium: "var(--warn)", low: "var(--muted)",
+  critical: "text-alert", high: "text-orange-300", medium: "text-yellow-300", low: "text-accent",
+};
+const SEVERITY_BAR: Record<Finding["severity"], string> = {
+  critical: "bg-alert", high: "bg-orange-400", medium: "bg-yellow-400", low: "bg-accent",
 };
 
-function scoreColor(score: number | null) {
-  if (score === null) return "var(--muted)";
-  return score >= 80 ? "var(--live)" : score >= 50 ? "var(--warn)" : "var(--bad)";
+const scoreColor = (n: number | null) => (n === null ? "text-muted" : n >= 80 ? "text-live" : n >= 50 ? "text-ink" : "text-alert");
+const button = "rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-accent hover:text-accent";
+
+function SectionLabel({ n, children }: { n: string; children: React.ReactNode }) {
+  return (
+    <h3 className="flex items-baseline gap-3 font-mono text-xs uppercase tracking-[0.2em] text-muted">
+      <span className="text-accent">{n}</span>
+      {children}
+    </h3>
+  );
 }
 
-function Score({ label, score }: { label: string; score: number | null }) {
+function Score({ label, score, big }: { label: string; score: number | null; big?: boolean }) {
   return (
-    <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
-      <div className="text-xs uppercase tracking-wide text-[var(--muted)]">{label}</div>
-      <div className="mt-1 text-3xl font-semibold tabular-nums" style={{ color: scoreColor(score) }}>
-        {score === null ? "n/a" : score}
-      </div>
+    <div className={`rounded border border-line bg-surface p-4 ${big ? "sm:col-span-1" : ""}`}>
+      <div className="font-mono text-[11px] uppercase tracking-widest text-muted">{label}</div>
+      <div className={`mt-1 font-semibold tabular-nums ${big ? "text-4xl" : "text-2xl"} ${scoreColor(score)}`}>{score === null ? "n/a" : score}</div>
     </div>
   );
 }
 
-// Everything below renders text from the audited site as React text nodes, never as HTML.
-function FindingCard({ f }: { f: Finding }) {
+function FindingCard({ f, open }: { f: Finding; open?: boolean }) {
   return (
-    <li className="border border-[var(--line)] p-4">
-      <div className="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs uppercase tracking-wide">
-        <span style={{ color: SEVERITY_COLOR[f.severity] }}>{f.severity}</span>
-        <span className="text-[var(--muted)]">{MODULE_LABEL[f.module]}</span>
-        <span className="text-[var(--muted)]">{f.effort} effort</span>
+    <details open={open} className="group overflow-hidden rounded border border-line bg-surface">
+      <summary className="flex cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2.5 text-sm marker:content-none">
+        <span className={`h-full w-1 self-stretch rounded ${SEVERITY_BAR[f.severity]}`} />
+        <span className={`font-semibold ${SEVERITY_COLOR[f.severity]}`}>{f.severity.toUpperCase()}</span>
+        <span className="text-ink-soft">{f.title}</span>
+        <span className="ml-auto font-mono text-[11px] text-muted">{MODULE_LABEL[f.module]} · {f.effort} effort</span>
+      </summary>
+      <div className="space-y-2 border-t border-line px-3 py-3">
+        <p className="text-sm leading-relaxed text-ink-soft">{f.detail}</p>
+        <p className="text-sm leading-relaxed text-ink"><span className="font-semibold text-accent">Fix:</span> {f.fix}</p>
+        <ul className="space-y-1 font-mono text-xs text-muted">
+          {f.evidence.map((e, i) => (
+            <li key={i} className="break-words">
+              evidence: {e.note}{e.quote ? <> — <code className="break-all text-ink-soft">{e.quote}</code></> : null} ({e.url})
+            </li>
+          ))}
+        </ul>
       </div>
-      <h4 className="font-semibold">{f.title}</h4>
-      <p className="mt-1 text-sm text-[var(--muted)]">{f.detail}</p>
-      <p className="mt-2 text-sm"><span className="font-medium">Fix:</span> {f.fix}</p>
-      <ul className="mt-2 space-y-1 text-xs text-[var(--muted)]">
-        {f.evidence.map((e, i) => (
-          <li key={i} className="break-words">
-            Evidence: {e.note}{e.quote ? <> — <code className="break-all">{e.quote}</code></> : null} ({e.url})
-          </li>
-        ))}
-      </ul>
-    </li>
+    </details>
   );
 }
 
-export default function ReportView({ report }: { report: Report }) {
+export default function ReportView({ report, permalink = true }: { report: Report; permalink?: boolean }) {
   const [copied, setCopied] = useState(false);
+
+  const order = [
+    "scores", "fixes",
+    report.ideas.length > 0 ? "ideas" : null,
+    report.competitors && report.competitors.rows.length > 0 ? "competitors" : null,
+    report.social ? "social" : null,
+    "modules",
+    report.couldntCheck.length > 0 ? "couldnt" : null,
+    "claude",
+  ].filter((x): x is string => x !== null);
+  const n = (id: string) => String(order.indexOf(id) + 1).padStart(2, "0");
+
   const copy = async () => {
-    await navigator.clipboard.writeText(report.fixPrompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(report.fixPrompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
   };
-  const download = () => {
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+  const saveFile = (content: string, type: string, extension: string) => {
+    const blob = new Blob([content], { type });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `siterecon-${report.domain}.json`;
+    a.download = `siterecon-${report.domain}.${extension}`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
+  // A link to claude.ai or chatgpt.com carries the prompt in its address, so it is capped, as RepoRecon caps its own.
+  const linkPrompt = encodeURIComponent(report.fixPrompt.slice(0, 6000));
+  const myPlatforms = Array.from(new Set((report.social?.profiles ?? []).filter((p) => p.kind === "profile").map((p) => p.platform)));
+  const score = (m: string) => report.modules.find((x) => x.module === m)?.score ?? null;
 
   return (
     <div className="space-y-10">
-      <header>
-        <p className="text-sm text-[var(--muted)]">
-          Audit of <span className="break-all text-[var(--ink)]">{report.url}</span> · {new Date(report.createdAt).toLocaleString()} ·{" "}
-          {report.pagesScanned.length} page{report.pagesScanned.length === 1 ? "" : "s"} read
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Score label="Overall" score={report.overallScore} />
+      <p className="font-mono text-xs text-muted">
+        Audit of <span className="break-all text-ink-soft">{report.url}</span> · {new Date(report.createdAt).toLocaleString()} · {report.pagesScanned.length} page
+        {report.pagesScanned.length === 1 ? "" : "s"} read
+      </p>
+
+      {report.injectionFlags > 0 && (
+        <div className="rounded border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
+          {report.injectionFlags} instruction-like passage{report.injectionFlags === 1 ? "" : "s"} aimed at AI tools found in this site&apos;s text. SiteRecon
+          treated {report.injectionFlags === 1 ? "it" : "them"} as ordinary text and did not follow {report.injectionFlags === 1 ? "it" : "them"}.
+        </div>
+      )}
+
+      <div>
+        <SectionLabel n={n("scores")}>Scores</SectionLabel>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Score label="Overall" score={report.overallScore} big />
           {report.modules.map((m) => <Score key={m.module} label={MODULE_LABEL[m.module]} score={m.score} />)}
         </div>
-      </header>
+      </div>
 
-      <section>
-        <h3 className="mb-3 text-xl font-semibold">Top fixes</h3>
-        {report.topFixes.length === 0
-          ? <p className="text-[var(--muted)]">No issues found in the areas checked.</p>
-          : <ol className="space-y-3">{report.topFixes.map((f) => <FindingCard key={f.id} f={f} />)}</ol>}
-      </section>
+      <div>
+        <SectionLabel n={n("fixes")}>Top fixes ({report.topFixes.length})</SectionLabel>
+        <div className="mt-3 space-y-3">
+          {report.topFixes.map((f, i) => <FindingCard key={f.id} f={f} open={i < 2} />)}
+          {report.topFixes.length === 0 && <p className="text-sm text-muted">No issues found in the areas checked.</p>}
+        </div>
+      </div>
 
       {report.ideas.length > 0 && (
-        <section>
-          <h3 className="mb-1 text-xl font-semibold">Marketing ideas</h3>
-          <p className="mb-3 text-sm text-[var(--muted)]">AI-generated suggestions, each tied to a problem found above. Check them before acting.</p>
-          <ul className="space-y-3">
+        <div>
+          <SectionLabel n={n("ideas")}>Marketing ideas</SectionLabel>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">AI-generated suggestions, each tied to a problem found above. Check them before acting.</p>
+          <ul className="mt-3 space-y-3">
             {report.ideas.map((idea, i) => (
-              <li key={i} className="border border-[var(--line)] p-4">
-                <div className="mb-1 text-xs uppercase tracking-wide text-[var(--muted)]">{idea.effort} effort</div>
-                <h4 className="font-semibold">{idea.title}</h4>
-                <p className="mt-1 text-sm text-[var(--muted)]">{idea.why}</p>
-                <p className="mt-2 text-xs text-[var(--muted)]">
-                  Addresses: {report.topFixes.find((f) => f.id === idea.findingId)?.title ?? idea.findingId}
-                </p>
+              <li key={i} className="rounded border border-line bg-surface px-3 py-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-ink">{idea.title}</h4>
+                  <span className="shrink-0 font-mono text-[11px] text-muted">{idea.effort} effort</span>
+                </div>
+                <p className="mt-1 text-sm leading-relaxed text-ink-soft">{idea.why}</p>
+                <p className="mt-2 font-mono text-[11px] text-muted">addresses: {report.topFixes.find((f) => f.id === idea.findingId)?.title ?? idea.findingId}</p>
               </li>
             ))}
           </ul>
-        </section>
+        </div>
       )}
 
-      {report.competitors && (
-        <section>
-          <h3 className="mb-1 text-xl font-semibold">Competitor comparison</h3>
-          {report.competitors.note && <p className="mb-3 text-sm text-[var(--muted)]">{report.competitors.note}</p>}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[32rem] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--muted)]">
-                  <th className="py-2 pr-4">Site</th><th className="py-2 pr-4">SEO</th><th className="py-2 pr-4">AI visibility</th><th className="py-2">Social</th>
-                </tr>
+      {report.competitors && report.competitors.rows.length > 0 && (
+        <div>
+          <SectionLabel n={n("competitors")}>Competitor comparison</SectionLabel>
+          {report.competitors.note && <p className="mt-2 text-sm leading-relaxed text-ink-soft">{report.competitors.note}</p>}
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[32rem] text-left text-xs">
+              <thead className="font-mono text-muted">
+                <tr><th className="py-1 pr-4 font-normal">Site</th><th className="py-1 pr-4 font-normal">SEO</th><th className="py-1 pr-4 font-normal">AI visibility</th><th className="py-1 font-normal">Social</th></tr>
               </thead>
-              <tbody>
-                <tr className="border-b border-[var(--line)] font-medium">
-                  <td className="py-2 pr-4">{report.domain} (you)</td>
-                  <td className="py-2 pr-4 tabular-nums">{report.modules.find((m) => m.module === "technical")?.score ?? "n/a"}</td>
-                  <td className="py-2 pr-4 tabular-nums">{report.modules.find((m) => m.module === "geo")?.score ?? "n/a"}</td>
-                  <td className="py-2">{[...new Set((report.social?.profiles ?? []).filter((p) => p.kind === "profile").map((p) => p.platform))].join(", ") || "none"}</td>
+              <tbody className="font-mono text-ink-soft">
+                <tr className="border-t border-line text-ink">
+                  <td className="py-1.5 pr-4">{report.domain} (you)</td>
+                  <td className="py-1.5 pr-4 tabular-nums">{score("technical") ?? "n/a"}</td>
+                  <td className="py-1.5 pr-4 tabular-nums">{score("geo") ?? "n/a"}</td>
+                  <td className="py-1.5">{myPlatforms.join(", ") || "none"}</td>
                 </tr>
                 {report.competitors.rows.map((row) => (
-                  <tr key={row.domain} className="border-b border-[var(--line)]">
-                    <td className="py-2 pr-4 break-all">{row.domain}</td>
-                    <td className="py-2 pr-4 tabular-nums">{row.technical ?? "n/a"}</td>
-                    <td className="py-2 pr-4 tabular-nums">{row.geo ?? "n/a"}</td>
-                    <td className="py-2">{row.platforms.join(", ") || "none"}</td>
+                  <tr key={row.domain} className="border-t border-line">
+                    <td className="py-1.5 pr-4 break-all">{row.domain}</td>
+                    <td className="py-1.5 pr-4 tabular-nums">{row.technical ?? "n/a"}</td>
+                    <td className="py-1.5 pr-4 tabular-nums">{row.geo ?? "n/a"}</td>
+                    <td className="py-1.5">{row.platforms.join(", ") || "none"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
-            {report.competitors.gaps.map((gap, i) => <li key={i}>{gap}</li>)}
-          </ul>
-        </section>
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-ink-soft">{report.competitors.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul>
+        </div>
       )}
 
       {report.social && (
-        <section>
-          <h3 className="mb-1 text-xl font-semibold">Social media</h3>
-          <p className="mb-3 text-sm text-[var(--muted)]">
+        <div>
+          <SectionLabel n={n("social")}>Social media</SectionLabel>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">
             {report.social.readerUsed ? "Public pages only. Profiles that need a login are not read." : "Links found on the site. The profile pages themselves were not opened."}
             {report.social.mentions ? ` ${report.social.mentions.hackerNews} Hacker News stories mention this site.` : ""}
           </p>
           {report.social.profiles.length === 0 ? (
-            <p className="text-sm">No social profiles are linked from the homepage.</p>
+            <p className="mt-3 text-sm text-muted">No social profiles are linked from the homepage.</p>
           ) : (
-            <ul className="space-y-2 text-sm">
+            <ul className="mt-3 space-y-2 text-sm">
               {report.social.profiles.map((p) => (
-                <li key={p.url} className="flex flex-wrap items-baseline gap-x-3 border border-[var(--line)] p-3">
-                  <span className="font-medium">{p.platform}</span>
-                  <span className="break-all text-[var(--muted)]">{p.url}</span>
-                  <span className="text-xs uppercase tracking-wide" style={{ color: p.status === "not_found" ? "var(--bad)" : p.status === "found" ? "var(--live)" : "var(--muted)" }}>
+                <li key={p.url} className="flex flex-wrap items-baseline gap-x-3 rounded border border-line bg-surface px-3 py-2">
+                  <span className="font-semibold text-ink">{p.platform}</span>
+                  <span className="break-all font-mono text-xs text-muted">{p.url}</span>
+                  <span className={`ml-auto font-mono text-[11px] uppercase tracking-wide ${p.status === "not_found" ? "text-alert" : p.status === "found" ? "text-live" : "text-muted"}`}>
                     {p.kind === "homepage" ? "placeholder link" : p.status.replace("_", " ")}
                   </span>
                 </li>
               ))}
             </ul>
           )}
-          {report.social.missing.length > 0 && (
-            <p className="mt-3 text-sm">Not linked: {report.social.missing.join(", ")}.</p>
-          )}
-        </section>
-      )}
-
-      {report.injectionFlags > 0 && (
-        <p className="border border-[var(--line)] p-4 text-sm text-[var(--warn)]">
-          This site&apos;s text contains {report.injectionFlags} instruction-like passage{report.injectionFlags === 1 ? "" : "s"} aimed
-          at AI tools. SiteRecon treated them as ordinary text and did not follow them.
-        </p>
-      )}
-
-      <section>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-xl font-semibold">Fix with Claude</h3>
-          <div className="flex gap-2">
-            <button onClick={copy} className="border border-[var(--ink)] bg-[var(--ink)] px-4 py-2 text-sm text-[var(--ground)]">
-              {copied ? "Copied" : "Copy prompt"}
-            </button>
-            <button onClick={download} className="border border-[var(--line)] px-4 py-2 text-sm">Download JSON</button>
-            <Link href={`/r/${report.id}`} className="border border-[var(--line)] px-4 py-2 text-sm">Permalink</Link>
-          </div>
+          {report.social.missing.length > 0 && <p className="mt-3 text-sm text-ink-soft">Not linked: {report.social.missing.join(", ")}.</p>}
         </div>
-        <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words border border-[var(--line)] bg-[var(--surface)] p-4 text-xs">
-          {report.fixPrompt}
-        </pre>
-      </section>
+      )}
 
-      {report.modules.map((m) => (
-        <section key={m.module}>
-          <h3 className="mb-1 text-xl font-semibold">{MODULE_LABEL[m.module]}</h3>
-          <p className="mb-3 text-sm text-[var(--muted)]">
-            {m.status === "failed"
-              ? "This part of the audit could not run."
-              : `${m.passed.length} checks passed, ${m.findings.length} issues found.`}
-          </p>
-          <ul className="space-y-3">{m.findings.map((f) => <FindingCard key={f.id} f={f} />)}</ul>
-        </section>
-      ))}
+      <div>
+        <SectionLabel n={n("modules")}>Every check</SectionLabel>
+        <div className="mt-3 space-y-3">
+          {report.modules.map((m) => (
+            <details key={m.module} className="overflow-hidden rounded border border-line bg-surface">
+              <summary className="flex cursor-pointer items-center gap-3 px-3 py-2.5 text-sm marker:content-none">
+                <span className="font-semibold text-ink">{MODULE_LABEL[m.module]}</span>
+                <span className={`font-mono tabular-nums ${scoreColor(m.score)}`}>{m.score ?? "n/a"}</span>
+                <span className="ml-auto font-mono text-[11px] text-muted">
+                  {m.status === "failed" ? "could not run" : `${m.passed.length} passed · ${m.findings.length} issue${m.findings.length === 1 ? "" : "s"}`}
+                </span>
+              </summary>
+              {m.findings.length > 0 && (
+                <div className="space-y-3 border-t border-line p-3">{m.findings.map((f) => <FindingCard key={f.id} f={f} />)}</div>
+              )}
+            </details>
+          ))}
+        </div>
+      </div>
 
       {report.couldntCheck.length > 0 && (
-        <section>
-          <h3 className="mb-3 text-xl font-semibold">Couldn&apos;t check</h3>
-          <ul className="space-y-1 text-sm text-[var(--muted)]">
-            {report.couldntCheck.map((c, i) => <li key={i} className="break-words">{c.what}: {c.why}</li>)}
+        <div>
+          <SectionLabel n={n("couldnt")}>Could not check</SectionLabel>
+          <ul className="mt-3 space-y-1 font-mono text-xs text-muted">
+            {report.couldntCheck.map((c, i) => <li key={i} className="break-words"><span className="text-ink-soft">{c.what}</span>: {c.why}</li>)}
           </ul>
-        </section>
+        </div>
       )}
+
+      <div>
+        <SectionLabel n={n("claude")}>Fix with Claude</SectionLabel>
+        <p className="mt-2 text-sm leading-relaxed text-ink-soft">A prompt built from the findings above. Paste it into Claude, or ChatGPT, to get the exact changes.</p>
+        <textarea
+          readOnly value={report.fixPrompt} rows={10}
+          className="mt-3 w-full rounded border border-line bg-ground p-2 font-mono text-xs text-ink-soft focus:border-accent focus:outline-none"
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={copy} className="rounded bg-accent px-4 py-2 text-sm font-medium text-ground transition-colors hover:bg-ink">{copied ? "Copied!" : "Copy prompt"}</button>
+          <a href={`https://claude.ai/new?q=${linkPrompt}`} target="_blank" rel="noopener noreferrer" className={button}>Open in Claude</a>
+          <a href={`https://chatgpt.com/?q=${linkPrompt}`} target="_blank" rel="noopener noreferrer" className={button}>Open in ChatGPT</a>
+          <button onClick={() => saveFile(reportToMarkdown(report), "text/markdown", "md")} className={button}>Download Markdown</button>
+          <button onClick={() => saveFile(JSON.stringify(report, null, 2), "application/json", "json")} className={button}>Download JSON</button>
+          {permalink && <Link href={`/r/${report.id}`} className={button}>Permalink</Link>}
+        </div>
+        <p className="mt-2 font-mono text-xs text-muted">If a link opens a blank chat, the prompt is already on your clipboard once you press Copy, so just paste it.</p>
+      </div>
     </div>
   );
 }

@@ -82,4 +82,4 @@ deploy/vm/        VM setup, egress rules and their self-check, systemd unit, Cad
 docs/             PRD (the spec), ARCHITECTURE, DEPLOY, ROADMAP, agent-system-prompts
 ```
 
-Spec: [`docs/PRD.md`](docs/PRD.md).
+Spec: [`docs/PRD.md`](docs/PRD.md). Credits for the projects it uses and was inspired by: [`docs/CREDITS.md`](docs/CREDITS.md).

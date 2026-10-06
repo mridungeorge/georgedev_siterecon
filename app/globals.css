@@ -1,33 +1,91 @@
 @import "tailwindcss";
 
+/* The same palette and motion as RepoRecon (../georgedev_AI/app/globals.css), so the two read as one product.
+   --warn and --bad are the only additions: RepoRecon colours warnings and errors with Tailwind's own yellow and
+   its --alert red, and SiteRecon's pages use these names. */
 :root {
-  --ground: #ffffff;
-  --ink: #0b1220;
-  --muted: #5b6475;
-  --line: #d9dee8;
-  --surface: #f6f8fb;
-  --accent: #071631;
-  --live: #17805f;
-  --warn: #9a5b00;
-  --bad: #a4262c;
+  color-scheme: dark;
+  --ground: #071631;
+  --surface: #0d2148;
+  --surface-2: #112a5c;
+  --line: #1d3565;
+  --ink: #ffffff;
+  --ink-soft: #c9d3e6;
+  --muted: #91a0bc;
+  --accent: #a9beeb;
+  --live: #7fd1ae;
+  --alert: #ff8a80;
+  --warn: #f2d36b;
+  --bad: #ff8a80;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #071631;
-    --ink: #f4f6fb;
-    --muted: #9aa6bd;
-    --line: #22335a;
-    --surface: #0c1f45;
-    --accent: #ffffff;
-    --live: #4fd1a5;
-    --warn: #f0b354;
-    --bad: #ff8a8f;
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-live: var(--live);
+  --color-alert: var(--alert);
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-jetbrains);
+
+  --animate-pulse-dot: pulse-dot 1.6s ease-in-out infinite;
+  --animate-fade-up: fade-up 0.5s ease-out both;
+  --animate-marquee: marquee 26s linear infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.6;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* People who ask their system for less motion get none. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 
 body {
   background: var(--ground);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--ground);
 }

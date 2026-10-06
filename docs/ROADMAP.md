@@ -8,6 +8,7 @@
 - `/methodology`, `/accuracy`, `/api/accuracy`, MLflow logging
 - Eval harness (9 fixture sites, 48 seeded problems) and an adversarial set (10 cases). Both run in CI, and the deploy workflow only starts after CI succeeds on a push to master. The adversarial competitor case was checked with a mutation test (the defence removed, the case fails).
 - The portfolio section (`george-portfolio`, hidden until `NEXT_PUBLIC_SITERECON_URL` is set)
+- Report downloads as Markdown and JSON, and a permalink
 
 ## Written but not run
 
@@ -17,9 +18,14 @@ These need a real VM or Docker, which were not available during the build.
 - `deploy/vm/setup.sh`, `egress-rules.sh` and `verify-egress.sh` have only been syntax-checked.
 - The GitHub workflows have never run. `deploy.yml` needs the variables listed at its top.
 
+## Checked against the real services
+
+- **NVIDIA NIM**: checked live on 2026-10-06 with a real key. It accepts JSON mode (HTTP 200, about 2 s a call), and the content review, competitor discovery and marketing ideas all returned output that passed validation. Full scans of georgemridun.dev took 44 to 116 s.
+- **GitHub API, Jina Reader, Chromium, Hacker News**: exercised in the same scans.
+
 ## Not verified against the real services
 
-No API keys were available, so the AI router (NVIDIA NIM and Gemini), PageSpeed, Tavily and MLflow are tested against fakes only. Whether NIM's model accepts JSON-mode output is untested; if it does not, every call falls through to Gemini.
+Gemini (the fallback), PageSpeed (needs a free key, and Google refuses keyless calls), Tavily and MLflow are tested against fakes only.
 
 ## Known gaps (deferred review findings)
 
@@ -41,8 +47,10 @@ No API keys were available, so the AI router (NVIDIA NIM and Gemini), PageSpeed,
 - Bare domains always use https, with no http fallback.
 - Four unusual IPv6 ranges are not blocked (probably unroutable on GCP).
 - The overall score is reweighted, without saying so, when PageSpeed is missing.
-- The Markdown download described in the spec is not built (JSON only).
-- Vision review of screenshots is not built; the browser step only measures word count and mobile overflow.
+- A vision-model review of a screenshot is deliberately not built. Anything a vision model says about layout cannot be verified by quoting the page, which is the evidence rule every AI claim here must meet, so it could only ever be an unscored opinion, and an image is one more place for a hostile page to hide instructions. The browser step measures word count and mobile overflow instead, both of which are checkable.
+- Marketing ideas are capped at 8 (the spec says 8 to 12).
+- An AI-written idea can be factually wrong. One said `llms.txt` carries "language and character encoding". The section is labelled AI-generated, but the wording is not checked. Showing the finding's own fixed explanation first would reduce this.
+- Competitor suggestions suit businesses better than individuals: a personal portfolio was compared with Microsoft, NVIDIA and Salesforce.
 
 ## Ideas for later
 
