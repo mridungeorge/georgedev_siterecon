@@ -25,7 +25,12 @@ These need a real VM or Docker, which were not available during the build.
 
 ## Not verified against the real services
 
-Gemini (the fallback), PageSpeed (needs a free key, and Google refuses keyless calls), Tavily and MLflow are tested against fakes only.
+Gemini (the fallback), Tavily and MLflow are tested against fakes only.
+
+## Also checked live (2026-10-06)
+
+- **PageSpeed Insights**, with a real key (Google refuses keyless calls). The speed module scored real pages. Scores for the same site moved noticeably between runs (40 and 100 on georgemridun.dev), which is how lab measurements behave, so treat the speed score as indicative.
+- **Content review against the real model.** Eight live runs showed the model answering only some of the four questions, quoting short button text, and adding or dropping commas when copying. The review now matches quotes ignoring punctuation and typography (the words and their order must still match), accepts three-word quotes, and asks once more for missing answers. Before this, 12 of 32 answers were thrown away. The evidence rule itself is unchanged.
 
 ## Known gaps (deferred review findings)
 
