@@ -58,7 +58,7 @@ It reads public social pages (GitHub API, yt-dlp for YouTube, Jina Reader for th
 npm test                  # unit and integration tests (vitest)
 npm run eval              # accuracy on the fixture sites; fails below the floor
 npm run eval:adversarial  # attacks on the tool itself; fails if any case stops holding
-npx tsc --noEmit && npm run lint && npm run build
+npm run typecheck && npm run lint && npm run build
 cd fetch-service && python -m pytest -q
 ```
 

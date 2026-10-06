@@ -18,7 +18,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx tsc --noEmit
+      # typecheck generates Next's route and layout types first: LayoutProps does not exist until it does
+      - run: npm run typecheck
       - run: npm run lint
       - run: npm test
       - name: Accuracy on the fixture sites
