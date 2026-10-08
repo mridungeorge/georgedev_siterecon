@@ -5,7 +5,8 @@ import { runTechnicalChecks } from "@/lib/checks/technical";
 import { runGeoChecks } from "@/lib/checks/geo";
 import { runContentChecks } from "@/lib/checks/content";
 import { runPerformanceChecks, type PageSpeedDeps } from "@/lib/checks/performance";
-import { runSocialChecks } from "@/lib/checks/social";
+import { runSocialChecks, type ProfileReader } from "@/lib/checks/social";
+import { composeProfileReaders } from "@/lib/social/instagram";
 import { findCompetitors } from "@/lib/competitors";
 import { generateIdeas } from "@/lib/ideas";
 import type { FetchClient } from "@/lib/fetch-client";
@@ -37,6 +38,8 @@ export interface RunDeps {
   pagespeed?: PageSpeedDeps | null;
   /** The optional Python service: reads public social pages and renders the page in a browser. */
   fetchClient?: FetchClient | null;
+  /** Optional: reads Instagram business and creator accounts through Meta's Graph API. */
+  instagram?: ProfileReader | null;
   /** Optional free web search, used to find more competitors. */
   search?: SearchFn | null;
   /** Asked before each competitor site is fetched. False skips it (the per-site rate limit). */
@@ -182,7 +185,8 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   try {
     const socialSignal = budget(budgets.social ?? 45_000);
     const client = deps.fetchClient ?? null;
-    const result = await runSocialChecks(snapshot, client ? (link, signal) => client.readProfile(link, signal) : null, socialSignal);
+    const reader = composeProfileReaders(deps.instagram ?? null, client ? (link, signal) => client.readProfile(link, signal) : null);
+    const result = await runSocialChecks(snapshot, reader, socialSignal);
     if (deps.mentions) {
       const hits = await deps.mentions(snapshot.domain, socialSignal).catch(() => null);
       result.summary.mentions = hits === null ? null : { hackerNews: hits };

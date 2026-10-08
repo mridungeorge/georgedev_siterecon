@@ -5,7 +5,7 @@ import { tryConsumeQuota, quotaLimits } from "@/lib/quota";
 
 const T0 = 1_800_000_000_000;
 const DAY = 24 * 60 * 60 * 1000;
-const limits = { llm: 2, pagespeed: 1, search: 1 };
+const limits = { llm: 2, pagespeed: 1, search: 1, instagram: 1 };
 let db: DatabaseSync;
 beforeEach(() => { db = openDb(":memory:"); });
 
@@ -34,7 +34,7 @@ describe("provider quota guard", () => {
 
 describe("quotaLimits", () => {
   it("has conservative free-tier defaults and reads overrides", () => {
-    expect(quotaLimits({})).toEqual({ llm: 400, pagespeed: 200, search: 30 });
-    expect(quotaLimits({ QUOTA_LLM_DAY: "50", QUOTA_PAGESPEED_DAY: "junk" })).toEqual({ llm: 50, pagespeed: 200, search: 30 });
+    expect(quotaLimits({})).toEqual({ llm: 400, pagespeed: 200, search: 30, instagram: 150 });
+    expect(quotaLimits({ QUOTA_LLM_DAY: "50", QUOTA_PAGESPEED_DAY: "junk" })).toEqual({ llm: 50, pagespeed: 200, search: 30, instagram: 150 });
   });
 });

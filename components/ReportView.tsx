@@ -290,6 +290,7 @@ export default function ReportView({ report, permalink = true }: { report: Repor
                 <li key={p.url} className="flex flex-wrap items-baseline gap-x-3 rounded border border-line bg-surface px-3 py-2">
                   <span className="font-semibold text-ink">{p.platform}</span>
                   <span className="break-all font-mono text-xs text-muted">{p.url}</span>
+                  {(p.title || p.note) && <span className="w-full text-xs text-ink-soft">{[p.title, p.note].filter(Boolean).join(" · ")}</span>}
                   <span className={`ml-auto font-mono text-[11px] uppercase tracking-wide ${p.status === "not_found" ? "text-alert" : p.status === "found" ? "text-live" : "text-muted"}`}>
                     {p.kind === "homepage" ? "placeholder link" : p.status.replace("_", " ")}
                   </span>

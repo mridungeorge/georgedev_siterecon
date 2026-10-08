@@ -10,6 +10,7 @@ import type { ScanQueue } from "./scan-queue";
 import type { LlmClient } from "./llm/router";
 import type { PageSpeedDeps } from "./checks/performance";
 import type { FetchClient } from "./fetch-client";
+import type { ProfileReader } from "./checks/social";
 import type { SearchFn } from "./search/tavily";
 import type { Report } from "./pipeline/schemas";
 
@@ -22,6 +23,7 @@ export interface ScanDeps {
   pagespeed?: PageSpeedDeps | null;
   /** The optional Python service, an optional free search, and the Hacker News mention counter. */
   fetchClient?: FetchClient | null;
+  instagram?: ProfileReader | null;
   search?: SearchFn | null;
   mentions?: ((domain: string, signal?: AbortSignal) => Promise<number | null>) | null;
   /** Called once per finished scan, e.g. to log it to MLflow. A failure here never affects the scan. */
@@ -142,7 +144,7 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
             reject(new Error("The scan took too long and was stopped."));
           }, deps.scanTimeoutMs ?? SCAN_TIMEOUT_MS);
         });
-        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, fetchClient: deps.fetchClient, search: deps.search, mentions: deps.mentions, allowCompetitorDomain: (d) => tryConsumeCompetitorFetch(deps.db, d, now()), signal: abort.signal });
+        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, fetchClient: deps.fetchClient, instagram: deps.instagram, search: deps.search, mentions: deps.mentions, allowCompetitorDomain: (d) => tryConsumeCompetitorFetch(deps.db, d, now()), signal: abort.signal });
         const report = await Promise.race([scan, timeout]);
         saveReport(deps.db, report);
         if (deps.logRun) void Promise.resolve().then(() => deps.logRun!(report, Date.now() - startedAt)).catch(() => {});

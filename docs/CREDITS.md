@@ -10,6 +10,7 @@ SiteRecon stands on other people's open-source work. This page says what was use
 | [Agent-Reach](https://github.com/Panniantong/Agent-Reach) by Panniantong | MIT | Deciding which social platform a URL belongs to (`fetch-service/app/routing.py`). Agent-Reach is an installer and health-checker for agent tools, not a reader, so the actual reads use the free tools it lists for each platform: the GitHub API, yt-dlp, and Jina Reader. Pinned to the commit that was tested |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Unlicense | Reading public YouTube channel details |
 | [Jina Reader](https://jina.ai/reader/) | Service | Reading public social pages without logging in |
+| [Instagram Graph API (Business Discovery)](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/business-discovery) by Meta | Service terms | Reading the public follower count and latest post of Instagram business and creator accounts, with the token of an account the site owner connected. Optional |
 | [Playwright](https://playwright.dev) | Apache-2.0 | The browser underneath Scrapling |
 | [cheerio](https://cheerio.js.org), [zod](https://zod.dev), [undici](https://undici.nodejs.org), [Next.js](https://nextjs.org), [FastAPI](https://fastapi.tiangolo.com), [httpx](https://www.python-httpx.org) | MIT and similar | Building blocks |
 

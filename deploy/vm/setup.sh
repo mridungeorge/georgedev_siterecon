@@ -51,6 +51,9 @@ GEMINI_API_KEY=
 PAGESPEED_API_KEY=
 TAVILY_API_KEY=
 MLFLOW_URL=
+# Instagram through Meta's Graph API (optional). The token expires about every 60 days.
+META_IG_USER_ID=
+META_ACCESS_TOKEN=
 EOF
   chown root:"$DEPLOY_USER" /etc/siterecon/siterecon.env && chmod 0640 /etc/siterecon/siterecon.env
   echo "Created /etc/siterecon/siterecon.env with a fresh secret. Add your API keys to it."

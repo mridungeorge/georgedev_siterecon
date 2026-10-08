@@ -5,6 +5,7 @@ import { ScanQueue } from "@/lib/scan-queue";
 import { createLlmClient } from "@/lib/llm/router";
 import { tryConsumeQuota } from "@/lib/quota";
 import { createFetchClient } from "@/lib/fetch-client";
+import { createInstagramReader } from "@/lib/social/instagram";
 import { createTavilySearch } from "@/lib/search/tavily";
 import { countHackerNewsMentions } from "@/lib/mentions";
 import { logScanRun } from "@/lib/observability/mlflow";
@@ -34,6 +35,20 @@ export function GET(req: Request) {
   const fetchClient = process.env.FETCH_SERVICE_URL && process.env.FETCH_SERVICE_SECRET
     ? createFetchClient({ baseUrl: process.env.FETCH_SERVICE_URL, secret: process.env.FETCH_SERVICE_SECRET })
     : null;
+  // Optional: Instagram business and creator accounts through Meta's Graph API, using the access token of
+  // the owner's connected professional account. Without both values Instagram is read the old way.
+  const instagram = process.env.META_IG_USER_ID && process.env.META_ACCESS_TOKEN
+    ? createInstagramReader({
+        userId: process.env.META_IG_USER_ID,
+        token: process.env.META_ACCESS_TOKEN,
+        quotaOk: () => tryConsumeQuota(db, "instagram"),
+        fetchJson: async (url, signal) => {
+          const timeout = AbortSignal.timeout(20_000);
+          const res = await fetch(url, { signal: signal ? AbortSignal.any([timeout, signal]) : timeout });
+          return { status: res.status, body: await res.json().catch(() => null) };
+        },
+      })
+    : null;
   return handleScan(req, {
     db,
     queue,
@@ -41,6 +56,7 @@ export function GET(req: Request) {
     llm: createLlmClient({ db }),
     pagespeed,
     fetchClient,
+    instagram,
     search: createTavilySearch({ apiKey: process.env.TAVILY_API_KEY, db }),
     mentions: (domain, signal) => countHackerNewsMentions(domain, fetch, signal),
     logRun: process.env.MLFLOW_URL ? (report, ms) => logScanRun({ baseUrl: process.env.MLFLOW_URL as string }, report, ms) : null,

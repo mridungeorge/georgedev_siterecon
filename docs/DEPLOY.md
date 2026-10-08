@@ -101,3 +101,17 @@ In the Vercel project for the portfolio, set `NEXT_PUBLIC_SITERECON_URL=https://
 - **DNS inside the container** uses 1.1.1.1 and 8.8.8.8 (`--dns` in `run-fetch.sh`), because the VM's own resolver is the metadata server, which the firewall blocks.
 - **The browser filter is best effort.** The firewall is the boundary, which is why the deploy refuses to start the container without it.
 - **Memory is tight.** A scan needs the web app (about 150 MB), the fetch service (about 100 MB), and Chromium (300 to 400 MB) at the same time as RepoRecon. The guard skips the browser step rather than risk the VM, but if RepoRecon itself is near the limit, expect skips.
+
+## Optional: Instagram through Meta's official API
+
+Without this, Instagram links are read through the fetch service, and Instagram usually answers with a login wall. With it, SiteRecon reads the public follower count, post count and latest post of any Instagram **business or creator** account that a site links to. Personal accounts cannot be read through the API, and the report says so.
+
+1. In the Instagram app, switch the account you will connect to a **Business** or **Creator** account, and link it to a Facebook Page.
+2. In the Meta developer dashboard, create an app with the Instagram API use case, add the Facebook-login setup, and give it the permissions `instagram_basic`, `pages_show_list`, `pages_read_engagement` and `business_management`.
+3. Generate a user access token for that account with those permissions, using Graph API Explorer on **graph.facebook.com**. Then run `me/accounts?fields=name,instagram_business_account` and note the Instagram `id` it returns.
+4. On the VM, edit `/etc/siterecon/siterecon.env` yourself (never paste the token into a chat or a ticket) and set `META_IG_USER_ID` and `META_ACCESS_TOKEN`, then `sudo systemctl restart siterecon`.
+5. Scan a site that links a business Instagram account. The report should show its follower count under Social media.
+
+The token lasts about 60 days. When it expires, the Instagram line in the report says "the Instagram access token has expired or was revoked, so it needs renewing" and everything else carries on. Generate a new token the same way and replace the value.
+
+Status: written and tested against fakes. It has not yet been run against the real Instagram API.

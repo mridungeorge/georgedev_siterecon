@@ -53,6 +53,26 @@ describe("runScan", () => {
     for (const item of report.fixKit) for (const f of item.forFindings) expect(allIds).toContain(f);
   });
 
+  it("reads an Instagram link through the Instagram reader when one is configured, and others through the fetch service", async () => {
+    const home = `<html lang="en"><head><title>Acme</title></head><body><h1>Acme</h1><a href="https://www.instagram.com/acme/">Instagram</a><a href="https://www.facebook.com/acme">Facebook</a></body></html>`;
+    const fetchHome: PageFetcher = async (url) => (url === `${O}/` ? page(url, home) : page(url, "nope", { status: 404 }));
+    const seen: string[] = [];
+    const report = await runScan(new URL(`${O}/`), {
+      fetchPage: fetchHome, emit: () => {},
+      instagram: async (link) => { seen.push(link.platform); return { status: "found", title: "Acme Bakery", note: "12.4K followers, 540 posts", lastActivityAt: new Date().toISOString() }; },
+      fetchClient: {
+        healthy: async () => true,
+        render: async () => ({ status: "skipped", reason: "test" }),
+        readProfile: async (link) => { seen.push(`fetch:${link.platform}`); return { status: "login_wall" }; },
+      },
+    });
+    expect(seen.sort()).toEqual(["fetch:facebook", "instagram"]);
+    const ig = report.social!.profiles.find((p) => p.platform === "instagram")!;
+    expect(ig).toMatchObject({ status: "found", title: "Acme Bakery", note: "12.4K followers, 540 posts" });
+    expect(report.social!.profiles.find((p) => p.platform === "facebook")!.status).toBe("login_wall");
+    expect(report.social!.readerUsed).toBe(true);
+  });
+
   it("keeps going when one module throws, and says so", async () => {
     const events: ScanEvent[] = [];
     const report = await runScan(new URL(`${O}/`), {

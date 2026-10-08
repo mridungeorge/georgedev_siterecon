@@ -67,7 +67,7 @@ const SOURCES: Record<ModuleRubric["module"], string> = {
   geo: "The same fetch, read for AI search crawler rules (ChatGPT search, Claude search, Perplexity, Google), the text in the HTML, structured data and dates. Blocking an AI training crawler such as GPTBot is shown as a choice, never as a problem. No AI.",
   content: "Fixed checks on the page text (80 points), plus a small AI review (20 points). The AI's answers only count when they quote a specific passage that is really on the page.",
   performance: "Google PageSpeed Insights, one mobile lab run. Needs a free API key. Each vital earns full marks when good, half in Google's needs-improvement band and none when poor; the overall speed score earns its share in proportion.",
-  social: "Social links found on the homepage, then each public profile page read without logging in. Pages that need a login are reported as unchecked.",
+  social: "Social links found on the homepage, then each public profile page read without logging in. Pages that need a login are reported as unchecked. Instagram business and creator accounts are read through Meta's official API when the server owner has connected one, which adds their follower count and latest post.",
 };
 
 const LABEL: Record<ModuleRubric["module"], string> = {

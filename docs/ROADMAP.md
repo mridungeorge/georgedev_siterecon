@@ -25,7 +25,7 @@ These need a real VM, which was not available during the build.
 
 ## Not verified against the real services
 
-Gemini (the fallback), Tavily and MLflow are tested against fakes only.
+Gemini (the fallback), Tavily, MLflow and the Instagram Graph API reader (`lib/social/instagram.ts`) are tested against fakes only. The Instagram reader needs a connected professional account and a token, and Business Discovery has not yet been confirmed to work with this app's token in development mode.
 
 ## Also checked live (2026-10-06)
 
