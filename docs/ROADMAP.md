@@ -81,3 +81,9 @@ Not done yet, in the order I would do them:
 2. Per-page results table, and passage-level citability scoring (the 134 to 167 word range).
 3. Deeper competitor comparison (run the same checks on each competitor, show a gap table) and richer social: Instagram through Meta's Business Discovery once a token exists.
 4. www/non-www and http to https redirect checks, hreflang, and a soft-404 probe. These need extra requests per scan.
+
+### Social: what each platform gives
+
+- **Facebook** is read without a login through Jina Reader. Meta only lets approved apps read other Pages' followers and posts through its API (an app-review feature), so SiteRecon does not. When a public Page states its followers in its description, that count is shown. Many pages show only a login wall to a bot, and then only the title is available. The report cannot say whether a Facebook Page is active.
+- **Instagram** business and creator accounts are read through Meta's official Business Discovery API when a token is configured (follower count, post count, latest post).
+- **LinkedIn** almost always answers with a login wall.

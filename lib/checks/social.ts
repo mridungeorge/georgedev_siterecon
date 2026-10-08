@@ -1,6 +1,7 @@
 import type { SiteSnapshot } from "@/lib/snapshot";
 import type { CheckOutcome, CouldntCheck, SocialProfile, SocialSummary } from "@/lib/pipeline/schemas";
 import { classifySocialUrl, extractSocialLinks, KEY_PLATFORMS, type SocialLink } from "@/lib/social/platforms";
+import { publicCountsNote } from "@/lib/social/counts";
 import { makeChecker } from "./helpers";
 
 // Public social scan. Only pages anyone can open without logging in are read, and only through
@@ -101,6 +102,12 @@ export async function runSocialChecks(
       entry.status = read.status;
       if (read.title) entry.title = read.title.slice(0, 120);
       if (read.note) entry.note = read.note.slice(0, 160);
+      // A public page often states its audience in the description it shows to anyone. Only a found page
+      // is read this way, and only when the reader did not already give a note of its own.
+      else if (read.status === "found" && read.description) {
+        const counts = publicCountsNote(read.description);
+        if (counts) entry.note = counts;
+      }
       if (read.lastActivityAt) entry.lastActivityAt = read.lastActivityAt;
       if (read.status === "login_wall") {
         couldntCheck.push({ what: `Social profile: ${link.platform}`, why: "it needs a login to read, and SiteRecon only reads public pages" });
