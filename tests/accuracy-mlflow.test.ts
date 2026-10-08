@@ -41,7 +41,7 @@ describe("readScorecards", () => {
 const REPORT = {
   id: "r1", url: "https://acme.example/", domain: "acme.example", createdAt: "2026-10-05T00:00:00.000Z", overallScore: 61,
   modules: [{ module: "technical", status: "ok", score: 57, findings: [], passed: [], couldntCheck: [] }, { module: "performance", status: "failed", score: null, findings: [], passed: [], couldntCheck: [] }],
-  topFixes: [], fixPrompt: "p", couldntCheck: [{ what: "x", why: "y" }], pagesScanned: ["https://acme.example/"], injectionFlags: 2, ideas: [], social: null, competitors: null,
+  topFixes: [], fixPrompt: "p", couldntCheck: [{ what: "x", why: "y" }], pagesScanned: ["https://acme.example/"], injectionFlags: 2, ideas: [], social: null, competitors: null, summary: null, fixKit: [],
 } as unknown as Report;
 
 type Call = { url: string; method: string; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any

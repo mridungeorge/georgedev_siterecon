@@ -20,6 +20,16 @@ const REPORT: Report = {
   ideas: [{ title: "Add a title tag", why: "Search results need one.", findingId: "technical:title", effort: "low" }],
   social: { profiles: [{ platform: "github", url: "https://github.com/acme", handle: "acme", kind: "profile", status: "found" }], missing: ["facebook", "instagram", "linkedin"], mentions: { hackerNews: 3 }, readerUsed: true },
   competitors: { rows: [{ domain: "rival.example", url: "https://rival.example/", source: "ai", technical: 90, geo: 60, platforms: ["facebook"] }], gaps: ["1 of 1 competitors score at least 10 points higher on SEO."], note: "Suggested by AI." },
+  summary: {
+    grade: "C", verdict: "Decent (C, 71/100). Strongest: SEO (80), weakest: Speed (40). 1 issue found, 1 of them a quick win.",
+    strongest: { module: "technical", score: 80 }, weakest: { module: "performance", score: 40 },
+    counts: { critical: 0, high: 1, medium: 0, low: 0 }, quickWins: ["technical:title"],
+    roadmap: { thisWeek: ["technical:title"], thisMonth: [], thisQuarter: [] },
+  },
+  fixKit: [{
+    id: "canonical", title: "Canonical tag", filename: "the <head> of the homepage", language: "html",
+    content: '<link rel="canonical" href="https://acme.example/">', note: "Tells search engines which address is the main one.", forFindings: ["technical:title"],
+  }],
 };
 
 describe("reportToMarkdown", () => {
@@ -51,6 +61,7 @@ describe("reportToMarkdown", () => {
     const hostile = "[click me](javascript:alert(1)) <script>alert(2)</script> <img src=x onerror=alert(3)> `|` | pipe";
     const out = reportToMarkdown({
       ...REPORT,
+      fixKit: [], // a fix kit holds code meant to be pasted as it is; it has its own tests
       topFixes: [finding("technical:title", hostile, hostile)],
       ideas: [{ title: hostile, why: hostile, findingId: "technical:title", effort: "low" }],
       couldntCheck: [{ what: hostile, why: hostile }],
@@ -77,11 +88,46 @@ describe("reportToMarkdown", () => {
 describe("the Claude prompt block", () => {
   it("cannot be closed early by backticks inside the prompt", () => {
     const evil = "ok\n```\n# injected heading\n[x](javascript:alert(1))\n````\nmore";
-    const out = reportToMarkdown({ ...REPORT, fixPrompt: evil });
+    const out = reportToMarkdown({ ...REPORT, fixKit: [], fixPrompt: evil });
     const open = out.split("\n").find((l) => /^`{3,}$/.test(l))!;
     expect(open.length).toBeGreaterThan(4); // longer than the longest run inside (4)
     const closers = out.split("\n").filter((l) => l === open);
     expect(closers).toHaveLength(2); // exactly one opening and one closing fence
     expect(out.indexOf(evil)).toBeGreaterThan(out.indexOf(open));
+  });
+});
+
+describe("reportToMarkdown summary, roadmap and fix kit", () => {
+  const md = reportToMarkdown(REPORT);
+  it("opens with the summary", () => {
+    expect(md).toContain("## Summary");
+    expect(md).toContain("Decent");
+    expect(md).toContain("71/100");
+    expect(md.indexOf("## Summary")).toBeLessThan(md.indexOf("## Scores"));
+  });
+  it("lays out the roadmap by effort, naming each finding", () => {
+    expect(md).toContain("## Roadmap");
+    expect(md).toMatch(/### This week\n\n- high: The homepage has no title tag/);
+    expect(md).not.toContain("### This month");
+  });
+  it("puts each ready-to-paste fix in a code block with where it goes and what to check", () => {
+    expect(md).toContain("## Ready-to-paste fixes");
+    expect(md).toContain("### Canonical tag");
+    expect(md).toContain("Where it goes:");
+    expect(md).toMatch(/```html\n<link rel="canonical" href="https:\/\/acme.example\/">\n```/);
+    expect(md).toContain("Tells search engines which address is the main one.");
+  });
+  it("cannot be broken out of by fix-kit content that contains a code fence", () => {
+    const hostile = { ...REPORT, fixKit: [{ ...REPORT.fixKit[0], content: "```\n# injected heading\n[x](javascript:alert(1))\n```" }] };
+    const out = reportToMarkdown(hostile);
+    const open = out.split("\n").find((l) => /^`{4,}html$/.test(l));
+    expect(open).toBeDefined();
+    expect(out).toContain(`\n${open!.slice(0, -4)}\n`);
+  });
+  it("leaves the sections out when the report has none", () => {
+    const bare = reportToMarkdown({ ...REPORT, summary: null, fixKit: [] });
+    expect(bare).not.toContain("## Summary");
+    expect(bare).not.toContain("## Roadmap");
+    expect(bare).not.toContain("## Ready-to-paste fixes");
   });
 });

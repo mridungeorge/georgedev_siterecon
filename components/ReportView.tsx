@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import type { Finding, ModuleResult, Report } from "@/lib/pipeline/schemas";
+import type { Finding, FixKitItem, ModuleResult, Report } from "@/lib/pipeline/schemas";
 import { reportToMarkdown } from "@/lib/report-markdown";
 
 // Laid out like RepoRecon's report: numbered section labels, one collapsible card per finding with a
@@ -64,11 +64,54 @@ function FindingCard({ f, open }: { f: Finding; open?: boolean }) {
   );
 }
 
+const GRADE_COLOR: Record<string, string> = { A: "text-live", B: "text-live", C: "text-ink", D: "text-orange-300", F: "text-alert" };
+
+/** One ready-to-paste file or snippet, with a copy button. The content comes from the audited site, so it is shown as text. */
+function FixKitCard({ item }: { item: FixKitItem }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(item.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="overflow-hidden rounded border border-line bg-surface">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-2.5">
+        <span className="text-sm font-semibold text-ink">{item.title}</span>
+        <span className="break-all font-mono text-[11px] text-muted">{item.filename}</span>
+        <button onClick={copy} className="ml-auto rounded border border-line px-3 py-1 font-mono text-[11px] text-ink transition-colors hover:border-accent hover:text-accent">
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <pre className="max-h-72 overflow-auto bg-ground p-3 font-mono text-xs leading-relaxed text-ink-soft"><code>{item.content}</code></pre>
+      <p className="px-3 py-2.5 text-xs leading-relaxed text-muted">{item.note}</p>
+    </div>
+  );
+}
+
 export default function ReportView({ report, permalink = true }: { report: Report; permalink?: boolean }) {
   const [copied, setCopied] = useState(false);
 
+  const findingById = new Map(report.modules.flatMap((m) => m.findings).map((f) => [f.id, f]));
+  const roadmapGroups = report.summary
+    ? ([
+        ["This week", "Quick fixes: low effort", report.summary.roadmap.thisWeek],
+        ["This month", "Medium effort", report.summary.roadmap.thisMonth],
+        ["This quarter", "Bigger jobs", report.summary.roadmap.thisQuarter],
+      ] as const).map(([label, hint, ids]) => ({ label, hint, findings: ids.flatMap((id) => findingById.get(id) ?? []) }))
+    : [];
+  const hasRoadmap = roadmapGroups.some((g) => g.findings.length > 0);
+
   const order = [
-    "scores", "fixes",
+    report.summary ? "summary" : null,
+    "scores",
+    hasRoadmap ? "roadmap" : null,
+    "fixes",
+    report.fixKit.length > 0 ? "kit" : null,
     report.ideas.length > 0 ? "ideas" : null,
     report.competitors && report.competitors.rows.length > 0 ? "competitors" : null,
     report.social ? "social" : null,
@@ -114,6 +157,25 @@ export default function ReportView({ report, permalink = true }: { report: Repor
         </div>
       )}
 
+      {report.summary && (
+        <div>
+          <SectionLabel n={n("summary")}>Summary</SectionLabel>
+          <div className="mt-3 flex flex-col gap-5 rounded border border-line bg-surface p-5 sm:flex-row sm:items-center">
+            <div className={`font-display text-7xl font-semibold leading-none ${report.summary.grade ? GRADE_COLOR[report.summary.grade] : "text-muted"}`} aria-label={`Grade ${report.summary.grade ?? "not available"}`}>
+              {report.summary.grade ?? "–"}
+            </div>
+            <div className="space-y-3">
+              <p className="text-base leading-relaxed text-ink">{report.summary.verdict}</p>
+              <div className="flex flex-wrap gap-2 font-mono text-[11px] uppercase tracking-wide">
+                {(["critical", "high", "medium", "low"] as const).filter((k) => report.summary!.counts[k] > 0).map((k) => (
+                  <span key={k} className={`rounded border border-line px-2 py-1 ${SEVERITY_COLOR[k]}`}>{report.summary!.counts[k]} {k}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div>
         <SectionLabel n={n("scores")}>Scores</SectionLabel>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -122,6 +184,31 @@ export default function ReportView({ report, permalink = true }: { report: Repor
         </div>
       </div>
 
+      {hasRoadmap && (
+        <div>
+          <SectionLabel n={n("roadmap")}>Roadmap</SectionLabel>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">Every issue found, grouped by how much work the fix takes. Start at the top.</p>
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            {roadmapGroups.filter((g) => g.findings.length > 0).map((g) => (
+              <div key={g.label} className="rounded border border-line bg-surface p-4">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-ink">{g.label}</h4>
+                  <span className="font-mono text-[11px] text-muted">{g.findings.length} · {g.hint}</span>
+                </div>
+                <ul className="mt-3 space-y-2">
+                  {g.findings.map((f) => (
+                    <li key={f.id} className="flex gap-2 text-sm leading-snug text-ink-soft">
+                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SEVERITY_BAR[f.severity]}`} aria-label={`${f.severity} severity`} />
+                      <span>{f.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <SectionLabel n={n("fixes")}>Top fixes ({report.topFixes.length})</SectionLabel>
         <div className="mt-3 space-y-3">
@@ -129,6 +216,14 @@ export default function ReportView({ report, permalink = true }: { report: Repor
           {report.topFixes.length === 0 && <p className="text-sm text-muted">No issues found in the areas checked.</p>}
         </div>
       </div>
+
+      {report.fixKit.length > 0 && (
+        <div>
+          <SectionLabel n={n("kit")}>Ready-to-paste fixes</SectionLabel>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">Built from what your own site says, not written by an AI. Check each one before you use it.</p>
+          <div className="mt-3 space-y-3">{report.fixKit.map((item) => <FixKitCard key={item.id} item={item} />)}</div>
+        </div>
+      )}
 
       {report.ideas.length > 0 && (
         <div>

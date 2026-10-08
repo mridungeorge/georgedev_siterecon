@@ -41,6 +41,18 @@ describe("runScan", () => {
     expect((done.data as { message: string }).message).toMatch(/\d+ of \d+ checks passed/);
   });
 
+  it("includes an executive summary and a fix kit built from the findings", async () => {
+    const report = await runScan(new URL(`${O}/`), { fetchPage, emit: () => {}, newId: () => "id-2" });
+    expect(report.summary).not.toBeNull();
+    expect(report.summary!.verdict).toContain(`${report.overallScore}/100`);
+    const allIds = report.modules.flatMap((m) => m.findings.map((f) => f.id));
+    const planned = [...report.summary!.roadmap.thisWeek, ...report.summary!.roadmap.thisMonth, ...report.summary!.roadmap.thisQuarter];
+    expect(planned.sort()).toEqual([...allIds].sort());
+    // the sample site has no robots.txt, sitemap or llms.txt, so the kit offers each of them
+    expect(report.fixKit.map((k) => k.id)).toEqual(expect.arrayContaining(["robots-txt", "sitemap-xml", "llms-txt", "canonical"]));
+    for (const item of report.fixKit) for (const f of item.forFindings) expect(allIds).toContain(f);
+  });
+
   it("keeps going when one module throws, and says so", async () => {
     const events: ScanEvent[] = [];
     const report = await runScan(new URL(`${O}/`), {

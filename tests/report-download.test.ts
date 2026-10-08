@@ -4,7 +4,7 @@ import type { Report } from "@/lib/pipeline/schemas";
 
 const report = (domain: string): Report => ({
   id: "abc", url: `https://${domain}/`, domain, createdAt: "2026-10-06T00:00:00.000Z", overallScore: 70,
-  modules: [], topFixes: [], fixPrompt: "Fix the title.", couldntCheck: [], pagesScanned: [`https://${domain}/`], injectionFlags: 0, ideas: [], social: null, competitors: null,
+  modules: [], topFixes: [], fixPrompt: "Fix the title.", couldntCheck: [], pagesScanned: [`https://${domain}/`], injectionFlags: 0, ideas: [], social: null, competitors: null, summary: null, fixKit: [],
 });
 
 describe("markdownDownload", () => {

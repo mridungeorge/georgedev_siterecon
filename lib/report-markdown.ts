@@ -50,13 +50,39 @@ export function reportToMarkdown(report: Report): string {
     out.push(`> This site's text contains ${report.injectionFlags} instruction-like passage${report.injectionFlags === 1 ? "" : "s"} aimed at AI tools. SiteRecon treated them as ordinary text.`, "");
   }
 
+  if (report.summary) out.push("## Summary", "", esc(report.summary.verdict), "");
+
   out.push("## Scores", "", "| Module | Score |", "|---|---|");
   for (const m of report.modules) out.push(`| ${esc(MODULE_LABEL[m.module] ?? m.module)} | ${score(m.score)} |`);
   out.push("");
 
+  if (report.summary) {
+    const byId = new Map(report.modules.flatMap((m) => m.findings).map((f) => [f.id, f]));
+    const groups: [string, string[]][] = [
+      ["This week", report.summary.roadmap.thisWeek],
+      ["This month", report.summary.roadmap.thisMonth],
+      ["This quarter", report.summary.roadmap.thisQuarter],
+    ];
+    if (groups.some(([, ids]) => ids.length > 0)) {
+      out.push("## Roadmap", "", "Every issue found, grouped by how much work the fix takes.", "");
+      for (const [label, ids] of groups) {
+        const lines = ids.flatMap((id) => (byId.get(id) ? [`- ${esc(byId.get(id)!.severity)}: ${esc(byId.get(id)!.title)}`] : []));
+        if (lines.length > 0) out.push(`### ${label}`, "", ...lines, "");
+      }
+    }
+  }
+
   out.push("## Top fixes", "");
   if (report.topFixes.length === 0) out.push("No issues found in the areas checked.", "");
   else report.topFixes.forEach((f, i) => out.push(findingBlock(f, i + 1)));
+
+  if (report.fixKit.length > 0) {
+    out.push("## Ready-to-paste fixes", "", "Built from what your own site says. Check each one before you use it.", "");
+    for (const item of report.fixKit) {
+      const f = fence(item.content);
+      out.push(`### ${esc(item.title)}`, "", `Where it goes: ${code(item.filename)}`, "", `${f}${item.language}`, item.content, f, "", esc(item.note), "");
+    }
+  }
 
   if (report.ideas.length > 0) {
     out.push("## Marketing ideas", "", "AI-generated suggestions, each tied to a problem found above. Check them before acting.", "");

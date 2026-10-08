@@ -13,6 +13,8 @@ import type { SearchFn } from "@/lib/search/tavily";
 import type { LlmClient } from "@/lib/llm/router";
 import { buildModuleResult, failedModule, overallScore, topFixes } from "@/lib/scoring";
 import { buildFixPrompt } from "@/lib/fix-prompt";
+import { buildSummary } from "@/lib/summary";
+import { buildFixKit } from "@/lib/fix-kit";
 import type { CheckOutcome, CouldntCheck, ModuleResult, Report } from "./schemas";
 import { type StepName } from "./steps";
 
@@ -247,12 +249,13 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   }
   throwIfCancelled(); // do not build and store a report nobody is waiting for
 
+  const overall = overallScore(modules);
   const report: Report = {
     id: (deps.newId ?? randomUUID)(),
     url: snapshot.home.finalUrl,
     domain: snapshot.domain,
     createdAt: new Date().toISOString(),
-    overallScore: overallScore(modules),
+    overallScore: overall,
     modules,
     topFixes: fixes,
     fixPrompt: buildFixPrompt({ url: snapshot.home.finalUrl, findings: fixes }),
@@ -262,6 +265,8 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     ideas,
     social,
     competitors,
+    summary: buildSummary(modules, overall),
+    fixKit: buildFixKit(snapshot, modules, social),
   };
   emit({
     event: "step-done",

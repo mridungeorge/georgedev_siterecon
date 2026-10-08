@@ -84,6 +84,34 @@ export const ModuleResultSchema = z.object({
   couldntCheck: z.array(CouldntCheckSchema),
 });
 
+/** A short plain-language read on the whole report and a plan for fixing it, worked out from the findings alone. */
+export const ReportSummarySchema = z.object({
+  grade: z.enum(["A", "B", "C", "D", "F"]).nullable(),
+  verdict: z.string(),
+  strongest: z.object({ module: ModuleNameSchema, score: z.number() }).nullable(),
+  weakest: z.object({ module: ModuleNameSchema, score: z.number() }).nullable(),
+  counts: z.object({ critical: z.number().int(), high: z.number().int(), medium: z.number().int(), low: z.number().int() }),
+  /** Ids of cheap fixes that matter. */
+  quickWins: z.array(z.string()),
+  /** Every finding id, grouped by how much work it takes to fix. */
+  roadmap: z.object({ thisWeek: z.array(z.string()), thisMonth: z.array(z.string()), thisQuarter: z.array(z.string()) }),
+});
+export type ReportSummary = z.infer<typeof ReportSummarySchema>;
+
+/** A file or snippet, built from the site's own data, that fixes one or more findings when pasted in. */
+export const FixKitItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  /** Where it goes: a file name such as robots.txt, or a place such as "the page head". */
+  filename: z.string(),
+  language: z.enum(["html", "json", "xml", "text"]),
+  content: z.string(),
+  /** What to check before using it. */
+  note: z.string(),
+  forFindings: z.array(z.string()),
+});
+export type FixKitItem = z.infer<typeof FixKitItemSchema>;
+
 export const ReportSchema = z.object({
   id: z.string(),
   url: z.string(),
@@ -101,6 +129,8 @@ export const ReportSchema = z.object({
   // Added later: reports stored before these existed still load, with them empty.
   social: SocialSummarySchema.nullable().default(null),
   competitors: CompetitorTableSchema.nullable().default(null),
+  summary: ReportSummarySchema.nullable().default(null),
+  fixKit: z.array(FixKitItemSchema).default([]),
 });
 
 export type ModuleName = z.infer<typeof ModuleNameSchema>;
