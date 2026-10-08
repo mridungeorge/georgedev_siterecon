@@ -60,7 +60,11 @@ export function createInstagramReader(deps: InstagramDeps): ProfileReader {
     if (error) {
       const code = typeof error.code === "number" ? error.code : null;
       const sub = typeof error.error_subcode === "number" ? error.error_subcode : null;
-      if (code === 190) return unreadable("the Instagram access token has expired or was revoked, so it needs renewing");
+      if (code === 190) {
+        // For the person running the server: the message says nothing about the token itself.
+        console.warn("[siterecon] the Instagram access token was rejected (code 190). Generate a new one and update META_ACCESS_TOKEN.");
+        return unreadable("the Instagram access token has expired or was revoked, so it needs renewing");
+      }
       if (code !== null && [4, 17, 32, 613].includes(code)) return unreadable("Instagram's rate limit was reached, try again later");
       if (code === 110 || code === 24 || sub === 2207013 || sub === 2207001) {
         return unreadable("Instagram only shares business or creator accounts, and this one is personal, private or does not exist");
@@ -116,6 +120,12 @@ export function composeProfileReaders(instagram: ProfileReader | null, fallback:
         if (signal?.aborted) throw err;
       }
     }
-    return second && second.status === "found" ? second : first;
+    // The fetch service found the page, so use its answer, but keep Instagram's explanation: a refused
+    // token or a personal account should never be hidden behind a thinner answer.
+    if (second && second.status === "found") {
+      const note = [second.note, first.note].filter(Boolean).join(". ");
+      return note ? { ...second, note } : second;
+    }
+    return first;
   };
 }

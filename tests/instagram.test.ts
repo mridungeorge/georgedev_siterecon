@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createInstagramReader, composeProfileReaders, type InstagramDeps } from "@/lib/social/instagram";
 import type { ProfileRead } from "@/lib/checks/social";
 import type { SocialLink } from "@/lib/social/platforms";
@@ -71,6 +71,14 @@ describe("createInstagramReader", () => {
       const r = await reader({ reply: err({ code, error_subcode: sub, message: "Invalid user id" }) }).read(link("acme"));
       expect(r.status).toBe("unreadable");
       expect(r.note).toMatch(/business or creator/i);
+    });
+    it("logs that the token was rejected, so the operator can see it in the server log, without the token", async () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      await reader({ reply: err({ code: 190, message: "expired" }) }).read(link("acme"));
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).not.toContain(TOKEN);
+      expect(String(warn.mock.calls[0][0])).toMatch(/Instagram access token/);
+      warn.mockRestore();
     });
     it.each([4, 17, 32, 613])("reports Instagram's own rate limit (code %i)", async (code) => {
       const r = await reader({ reply: err({ code, message: "limit" }) }).read(link("acme"));
@@ -156,9 +164,16 @@ describe("composeProfileReaders", () => {
     const read = composeProfileReaders(instagram({ status: "unreadable", note }).read, fallback(wall).read)!;
     expect(await read(link("acme"))).toEqual({ status: "unreadable", note });
   });
-  it("takes the fetch service's answer for Instagram when Instagram gave none and it found the page", async () => {
-    const read = composeProfileReaders(instagram({ status: "unreadable", note: "expired" }).read, fallback(found).read)!;
-    expect((await read(link("acme"))).status).toBe("found");
+  it("takes the fetch service's answer for Instagram when Instagram gave none and it found the page, but keeps Instagram's explanation so a refused token is never invisible", async () => {
+    const read = composeProfileReaders(instagram({ status: "unreadable", note: "the Instagram access token has expired" }).read, fallback(found).read)!;
+    const r = await read(link("acme"));
+    expect(r.status).toBe("found");
+    expect(r.title).toBe("from the fetch service");
+    expect(r.note).toBe("the Instagram access token has expired");
+  });
+  it("joins both notes when the fetch service had one too", async () => {
+    const read = composeProfileReaders(instagram({ status: "unreadable", note: "personal account" }).read, fallback({ status: "found", note: "public page" }).read)!;
+    expect((await read(link("acme"))).note).toBe("public page. personal account");
   });
   it("trusts Instagram when it says the profile does not exist", async () => {
     const fb = fallback(found);
