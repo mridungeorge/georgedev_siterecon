@@ -35,7 +35,7 @@ describe("collectSnapshot", () => {
       [`${O}/e`]: page(`${O}/e`, "<html>e</html>"),
     });
 
-    const { snapshot, couldntCheck } = await collectSnapshot(new URL(`${O}/`), fetchPage);
+    const { snapshot, couldntCheck } = await collectSnapshot(new URL(`${O}/`), fetchPage, 5);
 
     expect(snapshot.domain).toBe("example.com");
     expect(snapshot.sitemapUrl).toBe(`${O}/map.xml`);
@@ -86,6 +86,41 @@ describe("collectSnapshot", () => {
   it("reports an unreachable homepage in plain language", async () => {
     const { fetchPage } = site({ [`${O}/`]: new Error("getaddrinfo ENOTFOUND example.com") });
     await expect(collectSnapshot(new URL(`${O}/`), fetchPage)).rejects.toBeInstanceOf(TargetUnreachableError);
+  });
+
+  it("records internal links that return an error status as broken links, not as unchecked pages", async () => {
+    const home = `<html><body><a href="/ok">ok</a><a href="/gone">gone</a><a href="/boom">boom</a><a href="/slow">slow</a></body></html>`;
+    const { fetchPage } = site({
+      [`${O}/`]: page(`${O}/`, home),
+      [`${O}/ok`]: page(`${O}/ok`, "<html>ok</html>"),
+      [`${O}/gone`]: page(`${O}/gone`, "nope", { status: 404 }),
+      [`${O}/boom`]: page(`${O}/boom`, "oops", { status: 500 }),
+      [`${O}/slow`]: new Error("timed out"),
+    });
+    const { snapshot, couldntCheck } = await collectSnapshot(new URL(`${O}/`), fetchPage);
+    expect(snapshot.brokenLinks).toEqual([{ url: `${O}/gone`, status: 404 }, { url: `${O}/boom`, status: 500 }]);
+    expect(snapshot.pages.map((p) => p.finalUrl)).toEqual([`${O}/ok`]);
+    // an error page is a finding, so it is not repeated as unchecked; a link that could not be fetched at all still is
+    expect(couldntCheck.map((c) => c.what)).toEqual([`${O}/slow`]);
+  });
+
+  it("reads up to 10 inner pages by default, four at a time, and keeps them in link order", async () => {
+    const links = Array.from({ length: 14 }, (_, i) => `<a href="/p${i}">p${i}</a>`).join("");
+    let inFlight = 0;
+    let peak = 0;
+    const fetchPage: PageFetcher = async (url) => {
+      if (url === `${O}/`) return page(url, `<html><body>${links}</body></html>`);
+      if (!/\/p\d+$/.test(url)) return page(url, "missing", { status: 404 });
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 15 - Number(url.split("/p")[1]))); // later pages answer sooner
+      inFlight--;
+      return page(url, `<html>${url}</html>`);
+    };
+    const { snapshot } = await collectSnapshot(new URL(`${O}/`), fetchPage);
+    expect(snapshot.pages.map((p) => p.finalUrl)).toEqual(Array.from({ length: 10 }, (_, i) => `${O}/p${i}`));
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(4);
   });
 
   it("follows a redirect to another host and audits that host", async () => {

@@ -31,9 +31,20 @@ const LABELS: Record<string, string> = {
   "image-alt": "Images have alt text", "robots-txt": "Has a robots.txt file", sitemap: "Has an XML sitemap",
   "structured-data": "Has structured data (JSON-LD)", "open-graph": "Has social preview tags",
   hsts: "Sends an HSTS header", "not-truncated": "The HTML is under 2 MB", "mobile-layout": "Fits a phone screen (only when a browser render ran)",
+  "json-ld-valid": "Every structured data block is valid JSON", "schema-complete": "Structured data has its required properties and no template text",
+  "canonical-valid": "The canonical link points at the page itself", "heading-order": "Heading levels step down one at a time",
+  "security-headers": "Sends nosniff, frame protection and a referrer policy", "image-dimensions": "Images have width and height so the layout does not jump",
+  "internal-links": "The homepage links to at least two other pages", "broken-links": "No followed internal link leads to an error page",
+  "sitemap-quality": "The sitemap lists each page once, on the right host (only when a sitemap exists)",
+  "robots-sitemap": "robots.txt points to the sitemap (only when robots.txt exists)",
+  "pages-titles": "Inner pages each have their own title (only when inner pages were read)",
+  "pages-descriptions": "Inner pages each have their own meta description (only when inner pages were read)",
+  "pages-h1": "Inner pages have exactly one H1 (only when inner pages were read)",
+  "pages-content": "Inner pages have at least 100 words (only when inner pages were read)",
   // AI visibility
-  "ai-crawler-gptbot": "GPTBot (ChatGPT) is allowed in robots.txt", "ai-crawler-claudebot": "ClaudeBot (Claude) is allowed in robots.txt",
-  "ai-crawler-perplexitybot": "PerplexityBot is allowed in robots.txt", "ai-crawler-google-extended": "Google-Extended (Gemini) is allowed in robots.txt",
+  "ai-crawler-oai-searchbot": "OAI-SearchBot (ChatGPT search) is allowed in robots.txt", "ai-crawler-claude-searchbot": "Claude-SearchBot (Claude search) is allowed in robots.txt",
+  "ai-crawler-perplexitybot": "PerplexityBot (Perplexity) is allowed in robots.txt", "ai-crawler-googlebot": "Googlebot (Google Search and AI Overviews) is allowed in robots.txt",
+  "freshness-signals": "A machine-readable date shows when the page was last updated",
   "content-in-html": "The content is in the HTML, not only added by JavaScript", "organisation-schema": "Organisation schema identifies the business",
   "question-headings": "Questions are answered under question headings", "citable-passage": "Has a 40 to 200 word paragraph that can be quoted",
   "llms-txt": "Has an llms.txt file (a small bonus)",
@@ -52,8 +63,8 @@ const LABELS: Record<string, string> = {
 };
 
 const SOURCES: Record<ModuleRubric["module"], string> = {
-  technical: "A plain fetch of the homepage, robots.txt, sitemap and response headers. No AI.",
-  geo: "The same fetch, read for AI crawler rules, the text in the HTML and structured data. No AI.",
+  technical: "A plain fetch of the homepage and up to ten inner pages, robots.txt, the sitemap and the response headers. No AI.",
+  geo: "The same fetch, read for AI search crawler rules (ChatGPT search, Claude search, Perplexity, Google), the text in the HTML, structured data and dates. Blocking an AI training crawler such as GPTBot is shown as a choice, never as a problem. No AI.",
   content: "Fixed checks on the page text (80 points), plus a small AI review (20 points). The AI's answers only count when they quote a specific passage that is really on the page.",
   performance: "Google PageSpeed Insights, one mobile lab run. Needs a free API key.",
   social: "Social links found on the homepage, then each public profile page read without logging in. Pages that need a login are reported as unchecked.",

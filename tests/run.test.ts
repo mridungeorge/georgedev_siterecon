@@ -38,7 +38,7 @@ describe("runScan", () => {
     expect(report.topFixes.length).toBeLessThanOrEqual(10);
     expect(report.fixPrompt).toContain(report.topFixes[0].title);
     const done = events.find((e) => e.event === "step-done" && e.data.step === "technical")!;
-    expect((done.data as { message: string }).message).toMatch(/\d+ of 18 checks passed/);
+    expect((done.data as { message: string }).message).toMatch(/\d+ of \d+ checks passed/);
   });
 
   it("keeps going when one module throws, and says so", async () => {

@@ -17,6 +17,8 @@ export interface SiteSnapshot {
   sitemapXml: string | null;
   llmsTxt: string | null;
   fetchedAt: string;
+  /** Internal links that were followed and led to an error page. */
+  brokenLinks?: { url: string; status: number }[];
   /** What a real browser saw, when the optional render step ran. */
   rendered?: { words: number; mobileOverflow: boolean };
 }
@@ -24,6 +26,10 @@ export interface SiteSnapshot {
 export class TargetUnreachableError extends Error {}
 export class NotHtmlError extends Error {}
 export class BlockedByRobotsError extends Error {}
+
+/** Inner pages read per scan, and how many are fetched at once. Each fetch may take up to 15 s. */
+const MAX_INNER_PAGES = 10;
+const PAGE_CONCURRENCY = 4;
 
 const ASSET = /\.(png|jpe?g|gif|webp|svg|ico|css|js|mjs|pdf|zip|gz|mp4|mp3|woff2?|ttf|xml|json|txt)$/i;
 
@@ -65,13 +71,13 @@ function internalLinks(html: string, base: string, origin: string): string[] {
 }
 
 /**
- * Crawls the homepage and a few key pages. Respects robots.txt: a disallowed homepage
+ * Crawls the homepage and up to ten internal pages. Respects robots.txt: a disallowed homepage
  * stops the scan before the page is requested, and disallowed inner pages are skipped.
  */
 export async function collectSnapshot(
   target: URL,
   fetchPage: PageFetcher,
-  maxPages = 5,
+  maxPages = MAX_INNER_PAGES,
 ): Promise<{ snapshot: SiteSnapshot; couldntCheck: CouldntCheck[] }> {
   const couldntCheck: CouldntCheck[] = [];
   const blocked = (host: string) =>
@@ -124,22 +130,41 @@ export async function collectSnapshot(
 
   const llmsTxt = await fetchText(`${origin}/llms.txt`, fetchPage);
 
-  const pages: SafeResponse[] = [];
-  let attempted = 0;
+  // Pick the pages to read first (robots.txt decides), then fetch them a few at a time. Results are
+  // handled in link order so the same site always gives the same report.
+  const candidates: string[] = [];
   for (const link of internalLinks(home.body, home.finalUrl, origin)) {
-    if (attempted >= maxPages) break;
+    if (candidates.length >= maxPages) break;
     if (!isAllowed(robots.rules, USER_AGENT, new URL(link).pathname)) {
       couldntCheck.push({ what: link, why: "robots.txt asks crawlers not to visit this page" });
       continue;
     }
-    attempted++;
-    try {
-      const res = await fetchPage(link);
-      if (res.status === 200 && res.contentType.includes("html")) pages.push(res);
-      else couldntCheck.push({ what: link, why: `returned HTTP ${res.status}` });
-    } catch (err) {
-      couldntCheck.push({ what: link, why: `could not be fetched (${(err as Error).message})` });
+    candidates.push(link);
+  }
+
+  type Fetched = { link: string; res: SafeResponse } | { link: string; error: string };
+  const results: Fetched[] = new Array(candidates.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < candidates.length) {
+      const i = next++;
+      const link = candidates[i];
+      try {
+        results[i] = { link, res: await fetchPage(link) };
+      } catch (err) {
+        results[i] = { link, error: (err as Error).message };
+      }
     }
+  };
+  await Promise.all(Array.from({ length: Math.min(PAGE_CONCURRENCY, candidates.length) }, worker));
+
+  const pages: SafeResponse[] = [];
+  const brokenLinks: { url: string; status: number }[] = [];
+  for (const r of results) {
+    if ("error" in r) couldntCheck.push({ what: r.link, why: `could not be fetched (${r.error})` });
+    else if (r.res.status >= 400) brokenLinks.push({ url: r.link, status: r.res.status });
+    else if (r.res.status === 200 && r.res.contentType.includes("html")) pages.push(r.res);
+    else couldntCheck.push({ what: r.link, why: r.res.status === 200 ? "is not a web page" : `returned HTTP ${r.res.status}` });
   }
 
   return {
@@ -154,6 +179,7 @@ export async function collectSnapshot(
       sitemapXml,
       llmsTxt,
       fetchedAt: new Date().toISOString(),
+      brokenLinks,
     },
     couldntCheck,
   };
