@@ -63,3 +63,21 @@ Gemini (the fallback), Tavily and MLflow are tested against fakes only.
 - Logged-in social sources as a separate, private mode
 - Re-scan scheduling and drift alerts
 - More fixture sites in the eval, especially real-world messy ones
+
+## Report depth upgrade (2026-10-09)
+
+Done, test-first and covered by the eval (19 fixture sites, 66 seeded problems, 0 false positives):
+
+- **AI crawlers are judged by what they control.** OAI-SearchBot, Claude-SearchBot, PerplexityBot and Googlebot decide whether the site can be cited, so they are scored. GPTBot, ClaudeBot, Google-Extended and CCBot only control model training; blocking them is reported as a choice, never as a problem. This was wrong before.
+- **Structured data is validated**, not just detected: broken JSON-LD blocks, missing required properties, and leftover template text such as [Business Name].
+- **About 20 more SEO checks**: canonical correctness, heading order, security headers, image dimensions, internal and broken links, sitemap and robots quality, AI freshness signals.
+- **Up to 10 inner pages are read** (four at a time) and checked site-wide: missing or duplicate titles and descriptions, H1s, thin pages.
+- **Speed earns partial credit** in Google's needs-improvement band, so a page at 85 no longer scores like a failure.
+- **The report opens with a grade and a plain-language verdict**, then a roadmap of every finding by effort (this week, this month, this quarter), then **ready-to-paste fixes** (canonical tag, robots.txt, sitemap.xml, Organization JSON-LD, llms.txt, Open Graph tags, security headers) built only from the site's own data. None of it is written by an AI.
+
+Not done yet, in the order I would do them:
+
+1. Content and E-E-A-T checks that need no AI: readability, author and about signals, trust pages, content depth by page type.
+2. Per-page results table, and passage-level citability scoring (the 134 to 167 word range).
+3. Deeper competitor comparison (run the same checks on each competitor, show a gap table) and richer social: Instagram through Meta's Business Discovery once a token exists.
+4. www/non-www and http to https redirect checks, hreflang, and a soft-404 probe. These need extra requests per scan.

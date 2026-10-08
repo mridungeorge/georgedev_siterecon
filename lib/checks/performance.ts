@@ -51,6 +51,9 @@ export async function runPerformanceChecks(url: string, deps: PageSpeedDeps, sig
   }
 
   const { outcomes, check } = makeChecker("performance");
+  // Google grades each vital as good, needs improvement or poor. Needs improvement earns half the
+  // weight, so a page that is nearly there is not scored like one that is hopeless.
+  const band = (value: number, good: number, poor: number) => (value <= good ? 1 : value <= poor ? 0.5 : 0);
   const sec = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
   const note = (text: string) => [{ url, note: `${text}. Measured by Google PageSpeed Insights, mobile lab data.` }];
   const slow = (title: string, detail: string, fix: string, evidence: Finding["evidence"]): Omit<Finding, "id" | "module"> =>
@@ -64,31 +67,31 @@ export async function runPerformanceChecks(url: string, deps: PageSpeedDeps, sig
       note(`Performance score ${Math.round(score * 100)}/100`),
     ),
     severity: score < 0.5 ? "high" : "medium",
-  });
+  }, score); // the PageSpeed score is itself a 0 to 1 measure, so a page at 85 keeps 85% of this weight
   check("lcp", 20, lcp <= 2500, slow(
     `The main content takes ${sec(lcp)} to appear`,
     "Largest Contentful Paint measures when the main content is visible. Under 2.5 s is good.",
     "Optimise the hero image or heading: compress and size the image, preload it, and cut render-blocking CSS and JavaScript.",
     note(`LCP ${sec(lcp)} (good is under 2.5 s)`),
-  ));
+  ), band(lcp, 2500, 4000));
   check("cls", 15, cls <= 0.1, slow(
     `The layout shifts while loading (CLS ${cls.toFixed(2)})`,
     "Cumulative Layout Shift measures content jumping around as the page loads. Under 0.1 is good.",
     "Set width and height on images and embeds, and reserve space for ads, banners and late-loading fonts.",
     note(`CLS ${cls.toFixed(2)} (good is under 0.1)`),
-  ));
+  ), band(cls, 0.1, 0.25));
   check("tbt", 15, tbt <= 200, slow(
     `The page is unresponsive for ${Math.round(tbt)} ms while loading`,
     "Total Blocking Time measures how long scripts freeze the page. Under 200 ms is good.",
     "Break up long JavaScript tasks, remove unused scripts and load third-party tags after the page is usable.",
     note(`TBT ${Math.round(tbt)} ms (good is under 200 ms)`),
-  ));
+  ), band(tbt, 200, 600));
   check("fcp", 10, fcp <= 1800, slow(
     `Nothing appears on screen for ${sec(fcp)}`,
     "First Contentful Paint measures when the first content shows. Under 1.8 s is good.",
     "Reduce server response time, inline critical CSS and remove render-blocking resources.",
     note(`FCP ${sec(fcp)} (good is under 1.8 s)`),
-  ));
+  ), band(fcp, 1800, 3000));
 
   return { outcomes, couldntCheck: [] };
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runPerformanceChecks, type PageSpeedDeps } from "@/lib/checks/performance";
 import { FindingSchema } from "@/lib/pipeline/schemas";
+import { buildModuleResult } from "@/lib/scoring";
 
 const psi = (m: { score: number; lcp: number; cls: number; tbt: number; fcp: number }) => ({
   lighthouseResult: {
@@ -73,5 +74,24 @@ describe("runPerformanceChecks", () => {
     const r = await runPerformanceChecks("https://example.com/", deps(over as Partial<PageSpeedDeps> & { response?: unknown }));
     expect(r.outcomes).toEqual([]);
     expect(r.couldntCheck[0].what).toMatch(/PageSpeed/);
+  });
+
+  describe("partial credit (Google grades vitals as good, needs improvement or poor)", () => {
+    const score = async (m: Parameters<typeof psi>[0]) => buildModuleResult("performance", (await runPerformanceChecks("https://example.com/", deps({ response: psi(m) }))).outcomes).score;
+    it("gives a fast page full marks", async () => {
+      expect(await score({ score: 0.95, lcp: 1800, cls: 0.02, tbt: 120, fcp: 1200 })).toBe(100);
+    });
+    it("gives half credit for every metric in the needs-improvement band, and the PageSpeed share for the score", async () => {
+      // perf-score 40 x 0.85 + (lcp 20 + cls 15 + tbt 15 + fcp 10) x 0.5
+      expect(await score({ score: 0.85, lcp: 3000, cls: 0.15, tbt: 400, fcp: 2200 })).toBe(64);
+    });
+    it("gives nothing for a metric in the poor band", async () => {
+      // only the PageSpeed share remains: 40 x 0.31
+      expect(await score({ score: 0.31, lcp: 6200, cls: 0.4, tbt: 900, fcp: 3900 })).toBe(12);
+    });
+    it("still reports a finding for each metric that is not good", async () => {
+      const r = await runPerformanceChecks("https://example.com/", deps({ response: psi({ score: 0.85, lcp: 3000, cls: 0.15, tbt: 400, fcp: 2200 }) }));
+      expect(failed(r).sort()).toEqual(["cls", "fcp", "lcp", "perf-score", "tbt"]);
+    });
   });
 });

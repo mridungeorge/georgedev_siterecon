@@ -5,8 +5,12 @@ export function makeChecker(module: ModuleName) {
   const outcomes: CheckOutcome[] = [];
   return {
     outcomes,
-    check(id: string, weight: number, ok: boolean, onFail: Omit<Finding, "id" | "module">): void {
-      outcomes.push(ok ? { id, weight, passed: true } : { id, weight, passed: false, finding: { id: `${module}:${id}`, module, ...onFail } });
+    check(id: string, weight: number, ok: boolean, onFail: Omit<Finding, "id" | "module">, credit?: number): void {
+      outcomes.push(
+        ok
+          ? { id, weight, passed: true }
+          : { id, weight, passed: false, ...(credit === undefined ? {} : { credit }), finding: { id: `${module}:${id}`, module, ...onFail } },
+      );
     },
   };
 }

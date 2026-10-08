@@ -306,7 +306,7 @@ export function runTechnicalChecks(s: SiteSnapshot): CheckOutcome[] {
   });
   check("internal-links", 3, linked.size >= 2, {
     severity: "low", effort: "medium",
-    title: `The homepage links to only ${linked.size} other page${linked.size === 1 ? "" : "s"}`,
+    title: linked.size === 0 ? "The homepage does not link to any other page" : `The homepage links to only ${linked.size} other page${linked.size === 1 ? "" : "s"}`,
     detail: "Internal links are how search engines discover pages and how authority flows from the homepage to the rest of the site. A homepage with almost none leaves the other pages hard to find.",
     fix: "Link from the homepage to the main service, product and contact pages with descriptive anchor text, not just \"click here\".",
     evidence: at(`${linked.size} distinct internal page${linked.size === 1 ? "" : "s"} linked`),

@@ -29,6 +29,15 @@ describe("content/sample-report.json", () => {
     expect(report.modules.find((m) => m.module === "performance")?.score).not.toBeNull();
   });
 
+  it("includes the executive summary, a roadmap that covers every finding, and a fix kit", () => {
+    const report = ReportSchema.parse(JSON.parse(raw));
+    expect(report.summary?.grade).not.toBeNull();
+    const ids = report.modules.flatMap((m) => m.findings.map((f) => f.id)).sort();
+    const planned = [...report.summary!.roadmap.thisWeek, ...report.summary!.roadmap.thisMonth, ...report.summary!.roadmap.thisQuarter].sort();
+    expect(planned).toEqual(ids);
+    expect(report.fixKit.length).toBeGreaterThan(0);
+  });
+
   it("carries no key, token or secret", () => {
     for (const pattern of [/nvapi-[A-Za-z0-9_-]{10,}/, /AIza[A-Za-z0-9_-]{20,}/, /tvly-/, /FETCH_SERVICE_SECRET/, /local-test-secret/, /Bearer\s+\S{10,}/i, /sk-[A-Za-z0-9]{20,}/]) {
       expect(raw, String(pattern)).not.toMatch(pattern);

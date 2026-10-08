@@ -13,7 +13,7 @@ export const MODULE_WEIGHTS: Record<ModuleName, number> = {
 
 export function buildModuleResult(module: ModuleName, outcomes: CheckOutcome[], couldntCheck: CouldntCheck[] = []): ModuleResult {
   const total = outcomes.reduce((sum, o) => sum + o.weight, 0);
-  const earned = outcomes.reduce((sum, o) => sum + (o.passed ? o.weight : 0), 0);
+  const earned = outcomes.reduce((sum, o) => sum + (o.passed ? o.weight : o.weight * Math.min(1, Math.max(0, o.credit ?? 0))), 0);
   return {
     module,
     status: couldntCheck.length > 0 ? "partial" : "ok",

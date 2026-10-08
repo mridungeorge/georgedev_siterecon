@@ -219,6 +219,10 @@ describe("internal-links", () => {
     expect(failed(outcomes)).toContain("internal-links");
     expect(finding(outcomes, "internal-links").title).toMatch(/1 other page/);
   });
+  it("says plainly when the homepage links to no other page at all", () => {
+    const outcomes = runTechnicalChecks(withBody(GOOD.replace(/<a href="\/(shop|about|contact)">[^<]*<\/a>/g, '<a href="#top">Top</a>')));
+    expect(finding(outcomes, "internal-links").title).toBe("The homepage does not link to any other page");
+  });
   it("counts distinct pages, not repeated links, and ignores anchors, mailto and external links", () => {
     const html = GOOD.replace(/<a href="\/(about|contact)">[^<]*<\/a>/g, '<a href="/shop">again</a><a href="#top">top</a><a href="mailto:a@b.co">m</a><a href="https://other.test/x">x</a>');
     expect(failed(runTechnicalChecks(withBody(html)))).toContain("internal-links");

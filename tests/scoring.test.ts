@@ -75,3 +75,20 @@ describe("buildFixPrompt", () => {
     expect(buildFixPrompt({ url: "https://example.com/", findings: [] })).toContain("found no issues");
   });
 });
+
+describe("partial credit", () => {
+  const partial = (id: string, weight: number, credit: number): CheckOutcome => ({ id, weight, passed: false, credit, finding: finding(id, "medium", "high") });
+  it("counts the earned share of a failed check towards the score, and still reports the finding", () => {
+    const r = buildModuleResult("performance", [pass("a", 50), partial("b", 50, 0.5)]);
+    expect(r.score).toBe(75);
+    expect(r.findings.map((f) => f.id)).toEqual(["technical:b"]);
+    expect(r.passed).toEqual(["a"]);
+  });
+  it("keeps credit between none and all of the weight", () => {
+    expect(buildModuleResult("performance", [partial("a", 100, 7)]).score).toBe(100);
+    expect(buildModuleResult("performance", [partial("a", 100, -3)]).score).toBe(0);
+  });
+  it("gives a passed check its full weight whatever credit says", () => {
+    expect(buildModuleResult("performance", [{ id: "a", weight: 10, passed: true, credit: 0 }]).score).toBe(100);
+  });
+});

@@ -147,5 +147,7 @@ export interface CheckOutcome {
   id: string;
   weight: number;
   passed: boolean;
+  /** For a failed check on a measured value: the share of the weight still earned, from 0 to 1. */
+  credit?: number;
   finding?: Finding;
 }
