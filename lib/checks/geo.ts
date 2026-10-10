@@ -156,6 +156,27 @@ export function runGeoChecks(s: SiteSnapshot): CheckOutcome[] {
     evidence: [{ url, note: "no question headings and no FAQPage schema" }],
   });
 
+  // Only when the page has question headings: a question with no answer under it gives an AI nothing to quote.
+  if (questionHeadings.length > 0) {
+    const unanswered = questionHeadings.toArray().filter((el) => {
+      const next = fresh(el).next();
+      const tag = String(next.prop("tagName") ?? "").toLowerCase();
+      if (tag === "p") {
+        const n = words(next.text().replace(/\s+/g, " ").trim());
+        return n < 20 || n > 200;
+      }
+      if (tag === "ul" || tag === "ol") return next.children("li").length < 2;
+      return true;
+    });
+    check("question-answers", 3, unanswered.length === 0, {
+      severity: "medium", effort: "low",
+      title: `${unanswered.length} question heading${unanswered.length === 1 ? " has" : "s have"} no answer directly beneath ${unanswered.length === 1 ? "it" : "them"}`,
+      detail: "AI answer engines lift the passage that sits right under a question. When the next thing after the question is another heading, a very short line or a long wall of text, there is nothing clean to quote.",
+      fix: "Put a direct answer of two to four sentences (about 20 to 100 words) immediately under each question heading, then add detail after it.",
+      evidence: unanswered.slice(0, 4).map((el) => ({ url, note: "no answer directly beneath this question", quote: clip(fresh(el).text()) })),
+    });
+  }
+
   const paragraphs = fresh("p").map((_, el) => fresh(el).text().replace(/\s+/g, " ").trim()).get();
   const citable = paragraphs.find((p) => words(p) >= 40 && words(p) <= 200);
   check("citable-passage", 14, Boolean(citable), {

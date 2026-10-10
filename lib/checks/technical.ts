@@ -3,7 +3,9 @@ import type { SiteSnapshot } from "@/lib/snapshot";
 import type { CheckOutcome, Evidence } from "@/lib/pipeline/schemas";
 import { pageFacts, type PageFacts } from "@/lib/page-facts";
 import { clip, makeChecker } from "./helpers";
-import { readJsonLd, schemaProblems } from "./jsonld";
+import { nodesOfType, readJsonLd, schemaProblems } from "./jsonld";
+
+const ARTICLE_TYPES = new Set(["Article", "BlogPosting", "NewsArticle"]);
 
 /** True when the page has at least one JSON-LD block that parses. Broken blocks are ignored. */
 export function hasValidJsonLd($: cheerio.CheerioAPI): boolean {
@@ -342,6 +344,54 @@ export function runTechnicalChecks(s: SiteSnapshot): CheckOutcome[] {
       detail: "When missing pages answer 'OK', search engines index the empty error pages as real content and can treat the whole site as low quality. Visitors who mistype an address also get no clear sign something is wrong.",
       fix: "Make the server return the 404 status code for addresses that do not exist, whatever the error page looks like.",
       evidence: [{ url: `${s.origin}/siterecon-check-missing-page`, note: "a made-up address returned HTTP 200" }],
+    });
+  }
+
+  // ---- Only when the page declares alternate languages: is the set usable? ----
+  const alternates = $('link[rel~="alternate" i][hreflang]')
+    .map((_, el) => ({ lang: ($(el).attr("hreflang") ?? "").trim(), href: ($(el).attr("href") ?? "").trim() }))
+    .get();
+  if (alternates.length > 0) {
+    const problems: string[] = [];
+    for (const a of alternates) {
+      if (!/^(x-default|[a-z]{2,3}(-[A-Za-z0-9]{2,8})*)$/i.test(a.lang)) problems.push(`hreflang "${clip(a.lang, 30)}" is not a valid language code`);
+      if (!/^https?:\/\//i.test(a.href)) problems.push(`"${clip(a.href, 60)}" is not an absolute address`);
+    }
+    const self = pageKey(url);
+    if (!alternates.some((a) => pageKey(a.href, url) === self)) problems.push("the set does not include the page itself");
+    check("hreflang-valid", 3, problems.length === 0, {
+      severity: "medium", effort: "low",
+      title: "The alternate-language links (hreflang) have problems",
+      detail: `Search engines ignore an hreflang set that is incomplete or malformed, and then show the wrong language to visitors. Found: ${problems.join("; ")}.`,
+      fix: "Give every language version a full set of absolute hreflang links, including one that points to itself and an x-default, with language codes such as en, fr or fr-CA.",
+      evidence: alternates.slice(0, MAX_EVIDENCE).map((a): Evidence => ({ url, note: `hreflang="${clip(a.lang, 30)}" href="${clip(a.href, 100)}"` })),
+    });
+  }
+
+  // ---- Only on pages that declare an article: who wrote it and when? ----
+  const namedAuthor = (author: unknown): boolean =>
+    Array.isArray(author)
+      ? author.some(namedAuthor)
+      : typeof author === "string"
+        ? author.trim() !== ""
+        : typeof author === "object" && author !== null && typeof (author as { name?: unknown }).name === "string" && ((author as { name: string }).name.trim() !== "");
+  const articlePages = [s.home, ...s.pages].flatMap((res) => {
+    const articles = nodesOfType(readJsonLd(cheerio.load(res.body)), ARTICLE_TYPES);
+    return articles.length > 0 ? [{ url: res.finalUrl, articles }] : [];
+  });
+  if (articlePages.length > 0) {
+    const lacking = articlePages.flatMap((p) =>
+      p.articles.flatMap((a) => {
+        const missing = [namedAuthor(a.author) ? "" : "author", typeof a.datePublished === "string" && a.datePublished.trim() ? "" : "publish date"].filter(Boolean);
+        return missing.length > 0 ? [{ url: p.url, missing }] : [];
+      }),
+    );
+    check("article-authorship", 3, lacking.length === 0, {
+      severity: "medium", effort: "low",
+      title: `${lacking.length} article${lacking.length === 1 ? " has" : "s have"} no named author or no publish date`,
+      detail: "Google's quality guidelines and AI answer engines weigh who wrote a piece and when. An article with no named author and date in its structured data gives them nothing to trust.",
+      fix: "Add an author (a Person with a name) and datePublished to each article's JSON-LD, and show the same byline and date on the page.",
+      evidence: lacking.slice(0, MAX_EVIDENCE).map((l): Evidence => ({ url: l.url, note: `missing: ${l.missing.join(" and ")}` })),
     });
   }
 

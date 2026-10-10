@@ -17,7 +17,8 @@ describe("runGeoChecks", () => {
   it("passes a page that is open to AI crawlers and easy to cite", () => {
     const outcomes = runGeoChecks(snap(GOOD, { llmsTxt: "# Acme", robotsTxt: "User-agent: *\nAllow: /" }));
     expect(failed(outcomes)).toEqual([]);
-    expect(outcomes.reduce((sum, o) => sum + o.weight, 0)).toBe(100);
+    // question-answers only exists when the page has question headings, so it is on top of the 100
+    expect(outcomes.filter((o) => o.id !== "question-answers").reduce((sum, o) => sum + o.weight, 0)).toBe(100);
   });
 
   it("reports each AI search crawler that robots.txt blocks, quoting the rule's agent", () => {
@@ -120,5 +121,35 @@ describe("crawlerAccess (what each AI crawler is allowed to do)", () => {
   it("says GPTBot is for training, not for ChatGPT search, so blocking it is not a visibility problem", () => {
     expect(row(null, "GPTBot").governs).toMatch(/training/i);
     expect(row(null, "OAI-SearchBot").governs).toMatch(/ChatGPT/);
+  });
+});
+
+describe("question-answers (only when the page has question headings)", () => {
+  const ids = (html: string) => runGeoChecks(snap(html, { llmsTxt: "x" })).map((o) => o.id);
+  const ANSWER = "Delivery takes five working days for most orders. Larger orders that ship from our Melbourne warehouse can take up to ten days, and we email a tracking link the day your order leaves.";
+
+  it("is not scored without question headings", () => {
+    expect(ids(GOOD.replace("<h2>How long does delivery take?</h2>", "<h2>Delivery</h2>"))).not.toContain("question-answers");
+  });
+  const QUESTION = "<h2>How long does delivery take?</h2>";
+  const run = (afterQuestion: string) => runGeoChecks(snap(GOOD.replace(`${QUESTION}<p>${PASSAGE}</p>`, `${QUESTION}${afterQuestion}`), { llmsTxt: "x" }));
+  const scored = (o: ReturnType<typeof runGeoChecks>) => o.map((x) => x.id).includes("question-answers");
+  const failedQa = (o: ReturnType<typeof runGeoChecks>) => o.filter((x) => !x.passed).map((x) => x.id).includes("question-answers");
+
+  it("passes when the question is followed directly by an answer of a sensible length", () => {
+    const outcomes = run(`<p>${ANSWER}</p>`);
+    expect(scored(outcomes)).toBe(true);
+    expect(failedQa(outcomes)).toBe(false);
+  });
+  it("accepts a list as the answer", () => {
+    expect(failedQa(run("<ul><li>Five working days for most orders</li><li>Up to ten days for large orders</li></ul>"))).toBe(false);
+  });
+  it("flags a question that is followed by another heading", () => {
+    const outcomes = run("<h2>Next</h2><p>Soon.</p>");
+    expect(failedQa(outcomes)).toBe(true);
+    expect(outcomes.find((o) => o.id === "question-answers")!.finding!.evidence[0].quote).toContain("How long does delivery take?");
+  });
+  it("flags an answer that is too short to be quoted", () => {
+    expect(failedQa(run("<p>Five days.</p>"))).toBe(true);
   });
 });

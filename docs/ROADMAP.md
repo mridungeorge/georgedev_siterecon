@@ -85,8 +85,8 @@ Added after that, in the same way (23 then 26 fixture sites, 74 seeded problems,
 
 Not done yet:
 
-1. Passage-level citability scoring (the 134 to 167 word range) and checks on inner pages' content (the content module reads the homepage only).
-2. hreflang and pagination checks, and author or byline signals for article pages.
+1. Passage-level scoring of how quotable each paragraph is (the 134 to 167 word range), and content checks on inner pages (the content module reads the homepage only). Question headings with a clean answer under them are checked now.
+2. Pagination checks. hreflang validity and article authorship are checked now, but only where a page declares them.
 3. Anything that needs something only you can supply: the Instagram token working against the real API, GitHub Actions deploys for this repository, and live runs of Gemini, Tavily and MLflow.
 
 ### Social: what each platform gives

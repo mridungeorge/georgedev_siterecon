@@ -158,6 +158,20 @@ export const FIXTURES: Record<string, Fixture> = {
   // A page that does not exist answers 200 with the homepage's content.
   "soft-404": healthy("soft-404", { files: { "/siterecon-check-missing-page": page(HEALTHY_HTML, { ...HSTS, ...FRESH, ...SECURITY }) } }),
 
+  // ---- Languages, authorship and answers: one problem each ----
+  // A French version is declared, but the set does not include the page itself.
+  "hreflang-broken": healthy("hreflang-broken", {
+    html: HEALTHY_HTML.replace("</head>", '<link rel="alternate" hreflang="fr" href="https://healthy-bakery.test/fr/"></head>'),
+  }),
+  // A blog post in the structured data with no author and no date.
+  "article-no-author": healthy("article-no-author", {
+    html: HEALTHY_HTML.replace("</head>", '<script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":"Our story"}</script></head>'),
+  }),
+  // The question is followed by another heading instead of an answer.
+  "unanswered-question": healthy("unanswered-question", {
+    html: HEALTHY_HTML.replace("<h2>How do I order a custom cake?</h2>\n<p>Choose a size", "<h2>How do I order a custom cake?</h2><h2>Prices</h2>\n<p>Choose a size"),
+  }),
+
   // ---- Trust, depth and readability: one problem each ----
   // No About link and no privacy policy link. The menu keeps three links so navigation still passes.
   "no-trust-pages": healthy("no-trust-pages", {

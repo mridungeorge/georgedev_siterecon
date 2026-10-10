@@ -391,3 +391,58 @@ describe("probe checks (only when the probe could be made)", () => {
     });
   });
 });
+
+describe("hreflang (only when the page declares alternate languages)", () => {
+  const withLinks = (links: string) => {
+    const s = goodSnap();
+    s.home.body = GOOD.replace("</head>", `${links}</head>`);
+    return runTechnicalChecks(s);
+  };
+  const SELF = '<link rel="alternate" hreflang="en" href="https://example.com/">';
+  const FR = '<link rel="alternate" hreflang="fr-CA" href="https://example.com/fr/">';
+
+  it("is not scored on a page with no hreflang links", () => {
+    expect(runTechnicalChecks(goodSnap()).map((o) => o.id)).not.toContain("hreflang-valid");
+  });
+  it("passes a complete set that includes the page itself, with x-default", () => {
+    const outcomes = withLinks(`${SELF}${FR}<link rel="alternate" hreflang="x-default" href="https://example.com/">`);
+    expect(outcomes.map((o) => o.id)).toContain("hreflang-valid");
+    expect(failed(outcomes)).not.toContain("hreflang-valid");
+  });
+  it("flags a set that leaves out the page itself, which search engines ignore", () => {
+    const outcomes = withLinks(FR);
+    expect(failed(outcomes)).toContain("hreflang-valid");
+    expect(finding(outcomes, "hreflang-valid").detail).toMatch(/itself/);
+  });
+  it("flags relative addresses and invalid language codes", () => {
+    const outcomes = withLinks(`${SELF}<link rel="alternate" hreflang="english" href="https://example.com/en/"><link rel="alternate" hreflang="de" href="/de/">`);
+    expect(failed(outcomes)).toContain("hreflang-valid");
+    const detail = finding(outcomes, "hreflang-valid").detail;
+    expect(detail).toMatch(/english/);
+    expect(detail).toMatch(/\/de\//);
+  });
+});
+
+describe("article-authorship (only on pages that declare an article)", () => {
+  const withSchema = (json: string) => {
+    const s = goodSnap();
+    s.home.body = GOOD.replace("</head>", `<script type="application/ld+json">${json}</script></head>`);
+    return runTechnicalChecks(s);
+  };
+  it("is not scored when no page declares an article", () => {
+    expect(runTechnicalChecks(goodSnap()).map((o) => o.id)).not.toContain("article-authorship");
+  });
+  it("passes an article with an author and a publish date", () => {
+    const outcomes = withSchema('{"@type":"BlogPosting","headline":"H","author":{"@type":"Person","name":"Ada"},"datePublished":"2026-01-02"}');
+    expect(outcomes.map((o) => o.id)).toContain("article-authorship");
+    expect(failed(outcomes)).not.toContain("article-authorship");
+  });
+  it("flags an article with no author or no date, naming what is missing", () => {
+    const outcomes = withSchema('{"@type":"Article","headline":"H"}');
+    expect(failed(outcomes)).toContain("article-authorship");
+    expect(finding(outcomes, "article-authorship").detail).toMatch(/author.*date|date.*author/i);
+  });
+  it("treats an empty author name as missing", () => {
+    expect(failed(withSchema('{"@type":"NewsArticle","headline":"H","author":{"name":"  "},"datePublished":"2026-01-02"}'))).toContain("article-authorship");
+  });
+});

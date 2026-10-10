@@ -29,6 +29,21 @@ export function readJsonLd($: cheerio.CheerioAPI): JsonLdBlock[] {
   return blocks;
 }
 
+/** Every node, at any depth, whose @type is one of `types`. Nesting is capped, so hostile input cannot loop. */
+export function nodesOfType(blocks: JsonLdBlock[], types: Set<string>): Record<string, unknown>[] {
+  const found: Record<string, unknown>[] = [];
+  const walk = (node: unknown, depth: number): void => {
+    if (depth > 10 || node === null || typeof node !== "object") return;
+    if (Array.isArray(node)) return node.forEach((item) => walk(item, depth + 1));
+    const record = node as Record<string, unknown>;
+    const raw = record["@type"];
+    if ((Array.isArray(raw) ? raw : [raw]).some((t) => typeof t === "string" && types.has(t))) found.push(record);
+    for (const value of Object.values(record)) walk(value, depth + 1);
+  };
+  for (const b of blocks) if (b.data !== null) walk(b.data, 0);
+  return found;
+}
+
 export interface SchemaProblem {
   kind: "missing" | "placeholder";
   /** The schema.org type the problem is in. */
