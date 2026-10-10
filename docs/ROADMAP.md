@@ -99,6 +99,20 @@ Not done yet:
 
 ### Social: what each platform gives
 
-- **Facebook** is read without a login through Jina Reader. Meta only lets approved apps read other Pages' followers and posts through its API (an app-review feature), so SiteRecon does not. When a public Page states its followers in its description, that count is shown. Many pages show only a login wall to a bot, and then only the title is available. The report cannot say whether a Facebook Page is active.
-- **Instagram** business and creator accounts are read through Meta's official Business Discovery API when a token is configured (follower count, post count, latest post).
-- **LinkedIn** almost always answers with a login wall.
+Agent-Reach (the open-source tool that gives agents access to social platforms) is used for its zero-login
+routes only. Its routes for X, Instagram and Facebook need a logged-in cookie or browser session; those break the
+platforms' terms, risk the account, and would put a login on a public server, so they are not used. Anything that
+needs a login is reported as such, never worked around. Checked live on 2026-10-11 against public accounts.
+
+| Platform | How it is read | What the report shows |
+|---|---|---|
+| X | FixTweet's public API, no login | Name, bio, followers and posts, whether the account is protected. No last-post date. Unofficial and third-party, so it can stop working; if it does the report says "could not be read". |
+| Instagram | Meta Business Discovery API when a token is set (business and creator accounts) | Followers, posts, latest post date. Without a token it is a login wall. |
+| Facebook | Jina Reader | The Page's own description and any follower count in it. Usually a login wall to a bot; a generic front page is reported as a login wall, not as a found profile. Meta's official Page API needs app review, so it is not used. |
+| LinkedIn | Jina Reader | Company page title, description and followers when the page shows them. |
+| YouTube | yt-dlp | Channel name, description, latest upload. |
+| GitHub | GitHub public API | Name, bio, latest public activity. |
+| TikTok, Pinterest | Jina Reader | Title, description, and counts the page states about itself. |
+
+Numbers are only ever taken from the page's own description, because a page body can show other accounts'
+counts. Nothing else from a profile is copied into a report except a fixed set of fields, cut short.
