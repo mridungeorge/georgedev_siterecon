@@ -51,6 +51,10 @@ const LABELS: Record<string, string> = {
   // Content and conversion
   "cta-present": "Has a clear call to action", "headline-clear": "The headline is 3 to 20 words", "contact-info": "Has a way to contact the business",
   "trust-signals": "Shows social proof (reviews, ratings, guarantees)", navigation: "Has a menu with three or more links",
+  "about-page": "Links to an About, team or company-story page on the same site", "policy-pages": "Links to a privacy policy",
+  "content-depth": "The homepage has at least 300 words of copy outside the menu and footer",
+  readability: "The copy is easy to read (Flesch reading ease of 50 or more)",
+  "copyright-year": "The footer's copyright year is current (this year or last)",
   "value-prop": "AI review: the value is clear", audience: "AI review: it says who it is for",
   "cta-clarity": "AI review: the next step is clear", differentiation: "AI review: something concrete sets it apart",
   // Speed

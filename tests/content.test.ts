@@ -5,13 +5,18 @@ import { LlmUnavailableError, type LlmClient, type LlmCallOptions } from "@/lib/
 import { UNTRUSTED_OPEN } from "@/lib/injection";
 import { snap } from "./helpers/snap";
 
+// Plain, short sentences: easy to read, and enough of them to count as real copy.
+const PLAIN = "<p>We make shelves. They fit small rooms. You pick a size and a colour. We build it and send it to your door. Most orders arrive in five days. If it does not fit, we take it back and give you your money. Call us if you need help.</p>";
+
 const GOOD = `<html lang="en"><head><title>Acme Storage</title></head><body>
 <header><nav><a href="/shop">Shop</a><a href="/about">About</a><a href="/contact">Contact</a></nav></header>
 <h1>Modular shelving made for small homes</h1>
 <p>Acme Storage designs shelving that fits awkward spaces, from tiny pantries to garage walls.</p>
 <p>Trusted by 12,000 customers, rated 4.8 out of 5 in independent reviews.</p>
+${PLAIN.repeat(8)}
 <a href="/quote">Get a free design quote</a>
 <a href="tel:+61300000000">Call us</a>
+<footer>© 2026 Acme Storage. <a href="/privacy">Privacy policy</a></footer>
 </body></html>`;
 
 const BARE = `<html><body><div>Welcome</div></body></html>`;

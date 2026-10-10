@@ -78,6 +78,10 @@ export const TRUTH: Record<string, Truth> = {
   "layout-shift": { expect: ["technical:heading-order", "technical:image-dimensions"], absent: ["technical:image-alt", "geo:question-headings"], exact: true },
   "bad-sitemap": { expect: ["technical:sitemap-quality"], absent: ["technical:sitemap"], exact: true },
   "robots-no-sitemap": { expect: ["technical:robots-sitemap"], absent: ["technical:robots-txt"], exact: true },
+  "no-trust-pages": { expect: ["content:about-page", "content:policy-pages"], absent: ["content:navigation"], exact: true },
+  "stale-copyright": { expect: ["content:copyright-year"], exact: true },
+  "thin-homepage": { expect: ["content:content-depth"], absent: ["geo:content-in-html"], exact: true },
+  "hard-to-read": { expect: ["content:readability"], absent: ["content:content-depth"], exact: true },
 
   "blocked-by-robots": { expect: [], error: "BlockedByRobotsError" },
   "bot-challenge": { expect: [], error: "TargetUnreachableError" },

@@ -18,6 +18,12 @@ const text = (body: string): FixtureFile => ({ body, contentType: "text/plain" }
 const HSTS = { "strict-transport-security": "max-age=31536000" };
 const FRESH = { "last-modified": "Tue, 01 Sep 2026 10:00:00 GMT" };
 
+// The year is read from the clock so the healthy site never goes stale; the stale fixture hard-codes an old one.
+const YEAR = new Date().getUTCFullYear();
+const STORY = `<h2>Our story</h2><p>Our shop opened in 2004. Two brothers started it with one oven. They baked bread before sunrise and sold it by eight. People came back the next day, and then the day after. Today the bakery is run by the family's next generation. We still mix every dough by hand. We still use the same ten year old starter. We buy flour from two farms in Victoria. We buy butter from a dairy forty minutes away. The ingredients decide how good the bread is, so we choose them with care. Come in any morning and say hello. You will usually find us behind the counter, covered in flour.</p><p>On a normal day we bake twelve kinds of bread. We make four kinds of pastry. We decorate cakes for birthdays, weddings and office parties. If you cannot see what you want, ask. We will often make it for you the next morning. Many of our regulars have been coming for fifteen years, and we know most of them by name. That is the part of the job we like best.</p>`;
+const FOOTER_TRUST = `<footer>© ${YEAR} Sunrise Bakery. <a href="/privacy">Privacy policy</a> `;
+const DENSE = `<p>The organisational infrastructure facilitates comprehensive operationalisation of multidimensional methodologies, notwithstanding considerable interdepartmental heterogeneity and characteristically unpredictable environmental contingencies.</p>`;
+
 const HEALTHY_HTML = `<!doctype html><html lang="en"><head><title>Sunrise Bakery: fresh sourdough baked daily</title>
 <meta name="description" content="Sunrise Bakery bakes sourdough, pastries and custom cakes every morning in Melbourne. Order online for pickup or delivery within 10 km.">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="canonical" href="https://healthy-bakery.test/">
@@ -26,11 +32,12 @@ const HEALTHY_HTML = `<!doctype html><html lang="en"><head><title>Sunrise Bakery
 <body><header><nav><a href="/menu">Menu</a><a href="/about">About</a><a href="/contact">Contact</a></nav></header>
 <h1>Fresh sourdough baked every morning in Melbourne</h1>
 <p>Sunrise Bakery is a family run bakery in Melbourne that bakes sourdough, pastries and custom celebration cakes from scratch every morning. Every loaf is made with a starter that is more than ten years old and slow fermented for two days, so the bread keeps longer and tastes better. Customers can order online for pickup or have it delivered within ten kilometres of the shop before nine o'clock.</p>
+${STORY}
 <h2>How do I order a custom cake?</h2>
 <p>Choose a size and flavour on the order page at least three days ahead and we will confirm the design by email. Most cakes are ready the same afternoon you collect them and every order comes with a printed ingredient list for people with allergies, so nobody has to guess. Call the shop if you need a cake sooner than that.</p>
 <p>Loved by locals for more than 20 years and rated 4.9 stars from over 800 reviews on Google.</p>
 <img src="loaf.jpg" alt="A sourdough loaf" width="640" height="480"><a href="/order">Order online</a><a href="tel:+61390000000">Call the shop</a>
-<footer><a href="https://www.facebook.com/sunrisebakery">Facebook</a><a href="https://www.instagram.com/sunrisebakery">Instagram</a><a href="https://www.linkedin.com/company/sunrise-bakery">LinkedIn</a></footer>
+${FOOTER_TRUST}<a href="https://www.facebook.com/sunrisebakery">Facebook</a><a href="https://www.instagram.com/sunrisebakery">Instagram</a><a href="https://www.linkedin.com/company/sunrise-bakery">LinkedIn</a></footer>
 </body></html>`;
 
 const ROBOTS_OPEN = "User-agent: *\nAllow: /\nSitemap: https://healthy-bakery.test/sitemap.xml\n";
@@ -58,6 +65,11 @@ const INNER_PAGES: Record<string, FixtureFile> = {
     "Contact us",
     ["Visit us at 12 Baker Street, Melbourne, or call the shop on 03 9000 0000 any morning between six and two. For large or custom orders it is best to ring at least three days ahead so that we can plan the baking, and we will confirm every order by email with the pickup time.",
      "Cafes and restaurants can order wholesale bread by emailing the shop, and we deliver across the inner suburbs before eight each day. If you have an allergy, tell us when you order and we will explain exactly how each item is made. We also take bookings for weddings, birthdays and office events, and we are always happy to talk through quantities and timing before you commit to anything."]),
+  "/privacy": inner("Privacy policy | Sunrise Bakery",
+    "How Sunrise Bakery collects, uses and protects the personal details you give us when you order online, call the shop or sign up for our emails.",
+    "Privacy policy",
+    ["We collect only what we need to take and deliver your order: your name, phone number, email address and delivery address. We use these details to confirm your order, to contact you if something changes and to keep a record for our accounts. We do not sell your details to anyone and we do not share them except with the delivery drivers who bring your order.",
+     "Payments are handled by our payment provider, so we never see or store your card number. You can ask us at any time to show you what we hold about you or to delete it. Email the shop and we will reply within five working days. If you are not happy with how we handled your details, you can contact the Office of the Australian Information Commissioner."]),
   "/order": inner("Order online for pickup or delivery | Sunrise Bakery",
     "Order sourdough, pastries and custom cakes from Sunrise Bakery online for pickup or delivery within ten kilometres, ready from seven each morning.",
     "Order online",
@@ -121,13 +133,26 @@ export const FIXTURES: Record<string, Fixture> = {
   "no-security-headers": healthy("no-security-headers", { headers: { ...HSTS, ...FRESH } }),
   // Images with no dimensions, and a heading that skips from H1 to H3.
   "layout-shift": healthy("layout-shift", {
-    html: HEALTHY_HTML.replace(' width="640" height="480"', "").replace("<h2>How do I order a custom cake?</h2>", "<h3>How do I order a custom cake?</h3>"),
+    html: HEALTHY_HTML.replace(' width="640" height="480"', "")
+      .replace("<h2>Our story</h2>", "<h3>Our story</h3>")
+      .replace("<h2>How do I order a custom cake?</h2>", "<h3>How do I order a custom cake?</h3>"),
   }),
   // The sitemap lists another host's page twice and leaves out the homepage.
   "bad-sitemap": healthy("bad-sitemap", {
     sitemap: `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://elsewhere.test/page</loc></url><url><loc>https://elsewhere.test/page</loc></url><url><loc>https://healthy-bakery.test/menu</loc></url></urlset>`,
   }),
   "robots-no-sitemap": healthy("robots-no-sitemap", { robots: "User-agent: *\nAllow: /\n" }),
+
+  // ---- Trust, depth and readability: one problem each ----
+  // No About link and no privacy policy link. The menu keeps three links so navigation still passes.
+  "no-trust-pages": healthy("no-trust-pages", {
+    html: HEALTHY_HTML.replace('<a href="/about">About</a>', '<a href="/order">Order</a>').replace('<a href="/privacy">Privacy policy</a> ', ""),
+  }),
+  "stale-copyright": healthy("stale-copyright", { html: HEALTHY_HTML.replace(`© ${YEAR}`, "© 2012") }),
+  // Only the original two paragraphs: well under 300 words.
+  "thin-homepage": healthy("thin-homepage", { html: HEALTHY_HTML.replace(STORY, "") }),
+  // The story is replaced by dense jargon, so the copy is long enough but hard to read.
+  "hard-to-read": healthy("hard-to-read", { html: HEALTHY_HTML.replace(STORY, DENSE.repeat(12)) }),
 
   // Only the AI *training* crawlers are blocked. That is a choice, not a problem, so nothing may be reported.
   "training-opt-out": healthy("training-opt-out", {

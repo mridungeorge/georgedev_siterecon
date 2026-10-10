@@ -5,6 +5,7 @@ import type { CheckOutcome, CouldntCheck } from "@/lib/pipeline/schemas";
 import { countInjectionAttempts, wrapUntrusted } from "@/lib/injection";
 import { extractJson, type LlmClient } from "@/lib/llm/router";
 import { clip, makeChecker } from "./helpers";
+import { readingEase } from "./readability";
 
 // Content and conversion. 80 of the 100 weight is deterministic. The AI review can move at
 // most 20 points, and only with evidence: every answer, pass or fail, must quote a specific
@@ -81,6 +82,13 @@ const TRUST_WORDS = /\b(reviews?|testimonials?|trusted|rated|ratings?|stars?|gua
 const CONTACT_TEXT = /\b(contact|get in touch|enquir\w*|inquir\w*|reach us|talk to us|call us|email us|visit us)\b/i;
 const CONTACT_HREF = /(contact|touch|enquir|inquir)/i;
 const NAV_LINKS = 'nav a, header a, [role="navigation"] a, [class*="menu"] a, [class*="nav"] a, [id*="menu"] a, [id*="nav"] a';
+const ABOUT_HREF = /(about|our-story|who-we-are|\bteam\b|\/company)/i;
+const ABOUT_TEXT = /\b(about|our story|who we are|meet the team|our team|the team)\b/i;
+const PRIVACY = /privacy/i;
+const COPYRIGHT = /(?:©|copyright)\s*(?:\(c\)\s*)?(\d{4})(?:\s*[-–—]\s*(\d{4}))?/gi;
+const MIN_COPY_WORDS = 300;
+const MIN_PROSE_WORDS = 100;
+const MIN_READING_EASE = 50;
 
 export async function runContentChecks(s: SiteSnapshot, llm: LlmClient | null, signal?: AbortSignal): Promise<ContentResult> {
   const { outcomes, check } = makeChecker("content");
@@ -103,7 +111,7 @@ export async function runContentChecks(s: SiteSnapshot, llm: LlmClient | null, s
     const text = $(el).text().replace(/\s+/g, " ").trim();
     return text.length > 0 && text.length <= 40 && CTA_WORDS.test(text);
   });
-  check("cta-present", 25, actions.length > 0, {
+  check("cta-present", 18,actions.length > 0, {
     severity: "high", effort: "low",
     title: "The homepage has no clear call to action",
     detail: "Visitors need an obvious next step such as Get a quote, Book a call or Shop now. Without one, interested visitors leave.",
@@ -112,7 +120,7 @@ export async function runContentChecks(s: SiteSnapshot, llm: LlmClient | null, s
   });
 
   const h1Words = words(h1);
-  check("headline-clear", 15, h1Words >= 3 && h1Words <= 20, {
+  check("headline-clear", 10,h1Words >= 3 && h1Words <= 20, {
     severity: "medium", effort: "low",
     title: h1 ? "The main headline is too short or too long to be clear" : "The homepage has no main headline",
     detail: "A good headline says in one line what the business offers. Very short or very long headlines rarely do.",
@@ -124,7 +132,7 @@ export async function runContentChecks(s: SiteSnapshot, llm: LlmClient | null, s
     const href = $(el).attr("href") ?? "";
     return /^(tel:|mailto:)/i.test(href) || CONTACT_HREF.test(href) || CONTACT_TEXT.test($(el).text());
   });
-  check("contact-info", 15, contactLinks.length > 0, {
+  check("contact-info", 10,contactLinks.length > 0, {
     severity: "medium", effort: "low",
     title: "There is no easy way to contact the business",
     detail: "A phone number, email link or contact page builds trust and gives ready-to-buy visitors a way in.",
@@ -132,7 +140,7 @@ export async function runContentChecks(s: SiteSnapshot, llm: LlmClient | null, s
     evidence: at("no tel:, mailto: or contact link found"),
   });
 
-  check("trust-signals", 10, TRUST_WORDS.test(bodyText), {
+  check("trust-signals", 8,TRUST_WORDS.test(bodyText), {
     severity: "medium", effort: "medium",
     title: "The homepage shows no social proof",
     detail: "Reviews, customer numbers, awards or guarantees reduce the perceived risk of buying.",
@@ -141,12 +149,74 @@ export async function runContentChecks(s: SiteSnapshot, llm: LlmClient | null, s
   });
 
   const navLinks = $(NAV_LINKS).length;
-  check("navigation", 15, navLinks >= 3, {
+  check("navigation", 10,navLinks >= 3, {
     severity: "medium", effort: "low",
     title: "The homepage has little or no navigation",
     detail: "Visitors who do not buy straight away need clear paths to products, pricing and information.",
     fix: "Add a header menu with at least three links such as Products, About and Contact.",
     evidence: at(`${navLinks} links found in the header or menu`),
+  });
+
+  // ---- Who is behind the site, and does it look looked after? None of this needs an AI ----
+  const links = $("a")
+    .map((_, el) => ({ href: $(el).attr("href") ?? "", text: $(el).text().replace(/\s+/g, " ").trim() }))
+    .get();
+  // Only the site's own pages count: a LinkedIn "company" page or another site's /about says nothing about this one.
+  const siteHost = new URL(url).hostname.replace(/^www\./, "");
+  const isOwn = (href: string) => {
+    try {
+      return new URL(href, url).hostname.replace(/^www\./, "") === siteHost;
+    } catch {
+      return false;
+    }
+  };
+  check("about-page", 6, links.some((l) => isOwn(l.href) && (ABOUT_HREF.test(l.href) || ABOUT_TEXT.test(l.text))), {
+    severity: "low", effort: "low",
+    title: "Nothing on the homepage says who is behind the business",
+    detail: "Visitors, Google and AI systems look for an About page or a team to decide whether a business is real and who stands behind it. Google's quality guidelines call this trust.",
+    fix: "Add an About page with who runs the business, how long it has operated and where, and link to it from the header or footer.",
+    evidence: at(`${links.length} links found, none to an about, team or company-story page`),
+  });
+  check("policy-pages", 6, links.some((l) => PRIVACY.test(l.href) || PRIVACY.test(l.text)), {
+    severity: "medium", effort: "low",
+    title: "There is no link to a privacy policy",
+    detail: "A privacy policy is expected by visitors, by Google for sites that collect any data, and by Australian law for most businesses. Its absence is a trust signal against the site.",
+    fix: "Publish a privacy policy and link to it from the footer of every page.",
+    evidence: at("no link with privacy in its address or its text"),
+  });
+
+  // The copy a visitor reads: everything except menus, footers and sidebars.
+  const copy = cheerio.load(s.home.body);
+  copy("script, style, noscript, template, svg, nav, footer, aside, [role=\"navigation\"]").remove();
+  copy("p, div, li, h1, h2, h3, h4, h5, h6, section, article, td, th, br").after(" ");
+  const copyWords = words(copy("body").text().replace(/\s+/g, " ").trim());
+  check("content-depth", 4, copyWords >= MIN_COPY_WORDS, {
+    severity: "low", effort: "medium",
+    title: `The homepage has only ${copyWords} words of copy`,
+    detail: "Search engines and AI systems have little to understand or quote from a page with this little text. A homepage that explains what the business does, for whom and why usually needs 300 words or more.",
+    fix: "Add copy that explains what you offer, who it is for, how it works, what it costs or how to start, and answers the questions customers ask most.",
+    evidence: at(`${copyWords} words of copy outside the menu and footer (300 or more is a healthy minimum)`),
+  });
+
+  const prose = copy("p").map((_, el) => copy(el).text().replace(/\s+/g, " ").trim()).get().join(" ");
+  const read = readingEase(prose);
+  check("readability", 4, read === null || read.words < MIN_PROSE_WORDS || read.ease >= MIN_READING_EASE, {
+    severity: "low", effort: "medium",
+    title: "The copy is hard to read",
+    detail: `The reading ease score is ${read?.ease ?? "n/a"}. Most customers read at around a school-year-nine level, and scores below ${MIN_READING_EASE} mean long sentences and long words that lose them. Plain English converts better.`,
+    fix: "Shorten sentences to about 15 words, replace long words with short ones, and write the way you would explain it to a customer in person.",
+    evidence: at(`reading ease ${read?.ease ?? "n/a"} over ${read?.words ?? 0} words of paragraph text (${MIN_READING_EASE} or more is easy to read)`),
+  });
+
+  const year = new Date(s.fetchedAt).getUTCFullYear();
+  const years = [...bodyText.matchAll(COPYRIGHT)].flatMap((m) => [Number(m[1]), m[2] ? Number(m[2]) : 0]);
+  const newest = years.length > 0 ? Math.max(...years) : null;
+  check("copyright-year", 4, newest === null || newest >= year - 1, {
+    severity: "low", effort: "low",
+    title: `The footer says © ${newest}`,
+    detail: "An out-of-date copyright year is the most visible sign of a site nobody looks after. It costs trust with visitors and with anyone judging whether the business is still operating.",
+    fix: `Update the notice to the current year, or write it so that it updates itself (for example ${year} from the server's date).`,
+    evidence: at(`the newest year in the copyright notice is ${newest}, and the page was read in ${year}`),
   });
 
   const injectionFlags = countInjectionAttempts([title, description, h1, bodyText].join(" "));
