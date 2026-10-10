@@ -115,3 +115,25 @@ Without this, Instagram links are read through the fetch service, and Instagram 
 The token lasts about 60 days. When it expires, the Instagram line in the report says "the Instagram access token has expired or was revoked, so it needs renewing" and everything else carries on. Generate a new token the same way and replace the value.
 
 Status: written and tested against fakes. It has not yet been run against the real Instagram API.
+
+## Optional: MLflow, to track scans over time
+
+MLflow is a free, open-source dashboard for experiment tracking. It needs no API key: it is a small server, and SiteRecon only needs its address. SiteRecon then records one run per finished scan (overall and per-module scores, duration, findings, pages read) in an experiment called `siterecon`. Cached results are not logged. It changes nothing in the report.
+
+MLflow has **no login**, so it listens on the VM's loopback address only. Never publish port 5000. If another app on a different host should log to it, put a login in front of it first (Caddy basic auth, or a private network such as Tailscale).
+
+```bash
+docker run -d --name mlflow --restart unless-stopped \
+  --memory=350m --memory-swap=350m --cpus=0.5 \
+  -p 127.0.0.1:5000:5000 \
+  -v mlflow-data:/mlflow \
+  ghcr.io/mlflow/mlflow:v2.18.0 \
+  mlflow server --host 0.0.0.0 --port 5000 --workers 1 \
+  --backend-store-uri sqlite:////mlflow/mlflow.db \
+  --default-artifact-root /mlflow/artifacts
+curl -s http://127.0.0.1:5000/health    # prints OK
+```
+
+Then set `MLFLOW_URL=http://127.0.0.1:5000` in `/etc/siterecon/siterecon.env` and restart `siterecon`. To see the dashboard, open an SSH tunnel from your own computer (`ssh -L 5000:127.0.0.1:5000 <vm>`) and browse to http://localhost:5000. Back up the `mlflow-data` volume now and then: it holds the only copy of the history.
+
+Checked on the real VM on 2026-10-10: the `siterecon` experiment was created and a run was recorded for a live scan. Memory use was about 230 MB of the 350 MB cap.

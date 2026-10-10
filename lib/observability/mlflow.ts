@@ -1,6 +1,6 @@
 import type { Report } from "@/lib/pipeline/schemas";
 
-// Logs one MLflow run per finished scan to the self-hosted MLflow that RepoRecon already uses, in
+// Logs one MLflow run per finished scan to a self-hosted MLflow (docs/DEPLOY.md says how to run one), in
 // its own experiment ("siterecon"). Every failure is swallowed: logging must never affect a scan.
 
 const EXPERIMENT = "siterecon";

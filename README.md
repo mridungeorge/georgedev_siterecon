@@ -39,7 +39,7 @@ With no keys the SEO, AI-visibility, content (fixed part) and social-link checks
 | `PAGESPEED_API_KEY` | Speed module | Google Cloud, PageSpeed Insights API. Free. |
 | `TAVILY_API_KEY` | More competitors from web search | tavily.com. 1,000 free credits a month, no card. |
 | `FETCH_SERVICE_URL` + `FETCH_SERVICE_SECRET` | Opening social profiles, the browser step | The Python service in `fetch-service/` |
-| `MLFLOW_URL` | One MLflow run logged per scan | The MLflow RepoRecon already uses |
+| `MLFLOW_URL` | One MLflow run logged per scan | A self-hosted MLflow, see docs/DEPLOY.md |
 
 ### The Python fetch service (optional)
 
