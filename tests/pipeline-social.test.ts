@@ -46,10 +46,10 @@ describe("runScan with the browser render, social and competitor steps", () => {
     const report = await run({ fetchClient: client(), mentions: async () => 5 }, events);
 
     expect(events.filter((e) => e.event === "step-start").map((e) => e.data.step)).toEqual([
-      "fetch", "render", "technical", "geo", "content", "performance", "social", "competitors", "synthesis",
+      "fetch", "render", "technical", "geo", "content", "marketing", "performance", "social", "competitors", "synthesis",
     ]);
     expect(() => ReportSchema.parse(report)).not.toThrow();
-    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance", "social"]);
+    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "marketing", "performance", "social"]);
     expect(report.social!.profiles.filter((p) => p.status === "found").map((p) => p.platform).sort()).toEqual(["facebook", "instagram"]);
     expect(report.social!.readerUsed).toBe(true);
     expect(report.social!.mentions).toEqual({ hackerNews: 5 });

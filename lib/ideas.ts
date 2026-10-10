@@ -1,10 +1,29 @@
 import { z } from "zod";
-import { EffortSchema, type CouldntCheck, type Finding, type Idea } from "@/lib/pipeline/schemas";
+import { EffortSchema, type CouldntCheck, type Finding, type Idea, type ModuleName, type ModuleResult } from "@/lib/pipeline/schemas";
 import { wrapUntrusted } from "@/lib/injection";
 import { listFromReply, type LlmClient } from "@/lib/llm/router";
 import { clip } from "@/lib/checks/helpers";
 
 export const MAX_IDEAS = 8;
+
+// Marketing ideas should answer marketing problems first. The most severe ten findings are mostly SEO,
+// which is why the ideas used to read like SEO advice. These are the modules in the order ideas are
+// drawn from, with at most five from any one so the list stays varied.
+const IDEA_MODULE_ORDER: ModuleName[] = ["marketing", "content", "social", "geo", "technical", "performance"];
+const MAX_IDEA_FINDINGS = 12;
+const MAX_PER_MODULE = 5;
+const SEVERITY_ORDER: Record<Finding["severity"], number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+/** The findings the ideas are built from: marketing first, a few from each module, twelve at most. */
+export function pickIdeaFindings(modules: ModuleResult[]): Finding[] {
+  const picked: Finding[] = [];
+  for (const name of IDEA_MODULE_ORDER) {
+    const findings = modules.filter((m) => m.module === name).flatMap((m) => m.findings);
+    // sort is stable, so equally severe findings keep the order the checks ran in
+    picked.push(...[...findings].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]).slice(0, MAX_PER_MODULE));
+  }
+  return picked.slice(0, MAX_IDEA_FINDINGS);
+}
 
 const IdeaItemSchema = z.object({
   title: z.string().min(3),

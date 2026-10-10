@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findCompetitors, computeGaps } from "@/lib/competitors";
+import { findCompetitors, computeGaps, marketHint } from "@/lib/competitors";
 import { CompetitorTableSchema } from "@/lib/pipeline/schemas";
 import type { LlmClient, LlmCallOptions } from "@/lib/llm/router";
 import { LlmUnavailableError } from "@/lib/llm/router";
@@ -101,7 +101,7 @@ describe("findCompetitors", () => {
 
 describe("computeGaps", () => {
   const row = (domain: string, technical: number, geo: number, platforms: ("facebook" | "instagram" | "linkedin")[]) =>
-    ({ domain, url: `https://${domain}/`, source: "ai" as const, technical, geo, platforms, passed: [] as string[] });
+    ({ domain, url: `https://${domain}/`, source: "ai" as const, technical, geo, platforms, title: "", headline: "", description: "", passed: [] as string[] });
 
   it("reports score gaps of 10 points or more and platforms most competitors have", () => {
     const gaps = computeGaps({ technical: 50, geo: 40, platforms: ["facebook"] }, [row("a.example", 70, 45, ["facebook", "instagram"]), row("b.example", 55, 60, ["instagram"])]);
@@ -127,8 +127,8 @@ describe("computeGaps", () => {
         withPassed("b.example", ["technical:canonical", "geo:llms-txt"]),
         withPassed("c.example", ["technical:canonical"]),
       ]);
-      expect(gaps[0]).toBe("3 of 3 competitors do not have this problem: The homepage has no canonical link.");
-      expect(gaps[1]).toBe("2 of 3 competitors do not have this problem: The site has no llms.txt file.");
+      expect(gaps[0]).toBe("3 of 3 competitors pass this check and you do not: Has a canonical link.");
+      expect(gaps[1]).toBe("2 of 3 competitors pass this check and you do not: Has an llms.txt file (a small bonus).");
     });
     it("leaves out a problem that fewer than half of them avoid", () => {
       const gaps = computeGaps(mine, [withPassed("a.example", ["geo:llms-txt"]), withPassed("b.example", []), withPassed("c.example", ["technical:canonical"]), withPassed("d.example", [])].map((r, i) => (i === 1 || i === 3 ? { ...r, passed: ["technical:title"] } : r)));
@@ -136,7 +136,7 @@ describe("computeGaps", () => {
     });
     it("does not count competitors that have no check data", () => {
       const gaps = computeGaps(mine, [withPassed("a.example", ["technical:canonical"]), withPassed("b.example", [])]);
-      expect(gaps[0]).toBe("1 of 1 competitors do not have this problem: The homepage has no canonical link.");
+      expect(gaps[0]).toBe("1 of 1 competitors pass this check and you do not: Has a canonical link.");
     });
     it("says nothing about problems the site does not have, and still falls back to no clear gaps", () => {
       expect(computeGaps({ ...mine, failures: [] }, [withPassed("a.example", ["technical:canonical"])])).toEqual(["No clear gaps against these competitors."]);
@@ -144,12 +144,68 @@ describe("computeGaps", () => {
     it("shows at most four such lines", () => {
       const many = Array.from({ length: 8 }, (_, i) => ({ id: `technical:c${i}`, title: `Problem ${i}` }));
       const gaps = computeGaps({ ...mine, failures: many }, [withPassed("a.example", many.map((m) => m.id))]);
-      expect(gaps.filter((g) => /do not have this problem/.test(g))).toHaveLength(4);
+      expect(gaps.filter((g) => /pass this check and you do not/.test(g))).toHaveLength(4);
     });
   });
 
   it("ignores competitors with no score for a metric", () => {
     const gaps = computeGaps({ technical: 50, geo: 50, platforms: [] }, [{ ...row("a.example", 0, 0, []), technical: null, geo: null }]);
     expect(gaps).toEqual(["No clear gaps against these competitors."]);
+  });
+});
+
+describe("positioning and discovery", () => {
+  const LONG = (n: number) => "x".repeat(n);
+
+  it("keeps how each competitor presents itself: its title, headline and description", async () => {
+    const fetchPage = site({ "rival.example": GOOD_HOME() });
+    const r = await findCompetitors(SELF, { llm: ai([{ domain: "rival.example" }]), search: null, fetchPage });
+    expect(r.table!.rows[0]).toMatchObject({
+      title: "Rival shelving for homes everywhere",
+      headline: "Storage for every home",
+    });
+    expect(r.table!.rows[0].description).toMatch(/^Rival sells modular shelving/);
+  });
+
+  it("cuts long text short, because it comes from the competitor's site", async () => {
+    const html = `<html><head><title>${LONG(400)}</title><meta name="description" content="${LONG(400)}"></head><body><h1>${LONG(400)}</h1></body></html>`;
+    const r = await findCompetitors(SELF, { llm: ai([{ domain: "rival.example" }]), search: null, fetchPage: site({ "rival.example": html }) });
+    const row = r.table!.rows[0];
+    expect(row.title.length).toBeLessThanOrEqual(120);
+    expect(row.headline.length).toBeLessThanOrEqual(120);
+    expect(row.description.length).toBeLessThanOrEqual(160);
+  });
+
+  describe("marketHint", () => {
+    it.each([
+      ["hsw.com.au", "Australia"], ["shop.example.au", "Australia"], ["bbc.co.uk", "the United Kingdom"], ["a.co.nz", "New Zealand"],
+      ["a.ca", "Canada"], ["a.ie", "Ireland"], ["a.de", "Germany"], ["a.in", "India"], ["a.sg", "Singapore"],
+    ])("reads the market from %s", (domain, market) => {
+      expect(marketHint(domain)).toBe(market);
+    });
+    it.each(["example.com", "example.io", "example.org", "localhost", "a.xyz"])("makes no guess for %s", (domain) => {
+      expect(marketHint(domain)).toBeNull();
+    });
+  });
+
+  it("tells the model the market, so a business is not compared with companies from another country", async () => {
+    const seen: LlmCallOptions[] = [];
+    const llm: LlmClient = async (o) => { seen.push(o); return { content: JSON.stringify({ competitors: [] }), provider: "nim", model: "m" }; };
+    await findCompetitors({ ...SELF, domain: "acme.com.au" }, { llm, search: null, fetchPage: site({}) });
+    expect(seen[0].user).toMatch(/Australia/);
+    expect(seen[0].system).toMatch(/same country/i);
+    seen.length = 0;
+    await findCompetitors({ ...SELF, domain: "acme.com" }, { llm, search: null, fetchPage: site({}) });
+    expect(seen[0].user).not.toMatch(/operating in/);
+  });
+
+  it("searches for what the business is, not just its address, and names the market", async () => {
+    const queries: string[] = [];
+    const search = async (q: string) => { queries.push(q); return []; };
+    await findCompetitors({ ...SELF, domain: "acme.com.au", title: "Acme Storage" }, { llm: null, search, fetchPage: site({}) });
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain("Acme Storage");
+    expect(queries[0]).toMatch(/competitors/i);
+    expect(queries[0]).toContain("Australia");
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { runContentChecks } from "@/lib/checks/content";
+import { MARKETING_RUBRIC } from "@/lib/checks/marketing";
 import { generateIdeas } from "@/lib/ideas";
 import { runScan } from "@/lib/pipeline/run";
 import { buildFixPrompt } from "@/lib/fix-prompt";
@@ -171,11 +172,12 @@ describe("I1: cancelling a scan stops the AI and PageSpeed work", () => {
     const llm: LlmClient = async (o) => {
       llmSignals.push(o.signal);
       if (o.system.includes("marketing consultant")) return { content: '{"ideas":[]}', provider: "nim", model: "m" };
-      return { content: JSON.stringify({ items: IDS.map((id) => ({ id, passed: true, quote: "Shelving for small homes" })) }), provider: "nim", model: "m" };
+      const ids = [...IDS, ...MARKETING_RUBRIC.map((r) => r.id)];
+      return { content: JSON.stringify({ items: ids.map((id) => ({ id, passed: true, quote: "Shelving for small homes" })) }), provider: "nim", model: "m" };
     };
     const pagespeed: PageSpeedDeps = { apiKey: "k", quotaOk: () => true, fetchJson: async (_u, s) => { psiSignals.push(s); return GOOD_PSI; } };
     await runScan(new URL(`${O}/`), { fetchPage, emit: () => {}, llm, pagespeed, signal: controller.signal });
-    expect(llmSignals.length).toBe(3); // content review, competitor discovery, marketing ideas
+    expect(llmSignals.length).toBe(4); // content review, marketing review, competitor discovery, marketing ideas
     expect(psiSignals.length).toBe(1);
     expect([...llmSignals, ...psiSignals].every((s) => s !== undefined && !s.aborted)).toBe(true);
     controller.abort();
@@ -199,10 +201,11 @@ describe("I1: cancelling a scan stops the AI and PageSpeed work", () => {
     const pagespeed: PageSpeedDeps = { apiKey: "k", quotaOk: () => true, fetchJson: (_u, s) => hangsUntilAborted(s) };
     const started = Date.now();
     const report = await runScan(new URL(`${O}/`), {
-      fetchPage, emit: () => {}, llm, pagespeed, stepBudgets: { content: 40, performance: 40, social: 40, competitors: 40, ideas: 40 },
+      fetchPage, emit: () => {}, llm, pagespeed, stepBudgets: { content: 40, marketing: 40, performance: 40, social: 40, competitors: 40, ideas: 40 },
     });
     expect(Date.now() - started).toBeLessThan(3000);
     expect(report.modules.find((m) => m.module === "content")!.status).toBe("partial");
+    expect(report.modules.find((m) => m.module === "marketing")!.status).toBe("partial");
     expect(report.modules.find((m) => m.module === "performance")!.status).toBe("failed");
     expect(report.ideas).toEqual([]);
     expect(report.overallScore).not.toBeNull();

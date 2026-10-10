@@ -6,6 +6,7 @@ export const MODULE_WEIGHTS: Record<ModuleName, number> = {
   technical: 30,
   geo: 20,
   content: 20,
+  marketing: 20,
   social: 15,
   performance: 15,
   competitors: 0, // comparison only, never part of the site's own score

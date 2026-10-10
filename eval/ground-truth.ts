@@ -63,7 +63,8 @@ export const TRUTH: Record<string, Truth> = {
   // and a clean control (the healthy bakery, which must report nothing).
   // Broken JSON-LD is ignored by search engines, so the page also counts as having no structured data.
   "schema-broken": {
-    expect: ["technical:json-ld-valid", "technical:structured-data", "geo:organisation-schema", "social:schema-sameas"],
+    // The ratings were inside the broken block, so they are lost with it.
+    expect: ["technical:json-ld-valid", "technical:structured-data", "geo:organisation-schema", "social:schema-sameas", "marketing:reviews-markup"],
     absent: ["technical:schema-complete"],
     exact: true,
   },
@@ -84,6 +85,14 @@ export const TRUTH: Record<string, Truth> = {
   "hreflang-broken": { expect: ["technical:hreflang-valid"], exact: true },
   "article-no-author": { expect: ["technical:article-authorship"], absent: ["technical:schema-complete"], exact: true },
   "unanswered-question": { expect: ["geo:question-answers"], absent: ["geo:question-headings"], exact: true },
+  "no-analytics": { expect: ["marketing:analytics"], exact: true },
+  "no-lead-capture": { expect: ["marketing:lead-capture"], exact: true },
+  "no-offer": { expect: ["marketing:offer-clarity"], exact: true },
+  "no-content-hub": { expect: ["marketing:content-hub"], exact: true },
+  "no-review-markup": { expect: ["marketing:reviews-markup"], exact: true },
+  "no-guarantee": { expect: ["marketing:risk-reversal"], exact: true },
+  "vague-proof": { expect: ["marketing:specific-proof"], absent: ["content:trust-signals"], exact: true },
+  "one-contact-route": { expect: ["marketing:contact-channels", "content:contact-info"], exact: true },
   "no-trust-pages": { expect: ["content:about-page", "content:policy-pages"], absent: ["content:navigation"], exact: true },
   "stale-copyright": { expect: ["content:copyright-year"], exact: true },
   "thin-homepage": { expect: ["content:content-depth"], absent: ["geo:content-in-html"], exact: true },

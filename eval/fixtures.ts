@@ -26,20 +26,29 @@ const FRESH = { "last-modified": "Tue, 01 Sep 2026 10:00:00 GMT" };
 const YEAR = new Date().getUTCFullYear();
 const STORY = `<h2>Our story</h2><p>Our shop opened in 2004. Two brothers started it with one oven. They baked bread before sunrise and sold it by eight. People came back the next day, and then the day after. Today the bakery is run by the family's next generation. We still mix every dough by hand. We still use the same ten year old starter. We buy flour from two farms in Victoria. We buy butter from a dairy forty minutes away. The ingredients decide how good the bread is, so we choose them with care. Come in any morning and say hello. You will usually find us behind the counter, covered in flour.</p><p>On a normal day we bake twelve kinds of bread. We make four kinds of pastry. We decorate cakes for birthdays, weddings and office parties. If you cannot see what you want, ask. We will often make it for you the next morning. Many of our regulars have been coming for fifteen years, and we know most of them by name. That is the part of the job we like best.</p>`;
 const FOOTER_TRUST = `<footer>© ${YEAR} Sunrise Bakery. <a href="/privacy">Privacy policy</a> `;
+// The marketing pieces, each separate so a variant can take away exactly one.
+const GTAG = `<script async src="https://www.googletagmanager.com/gtag/js?id=G-SUNRISE1"></script>`;
+const RATING = `"aggregateRating":{"@type":"AggregateRating","ratingValue":"4.9","reviewCount":"800"},`;
+const SIGNUP = `<form action="/subscribe" method="post"><input type="email" name="email" placeholder="Your email"><button>Get our weekly specials</button></form>`;
+const BLOG_LINK = `<a href="/blog">Blog</a>`;
+const OFFER = `<p>Sourdough loaves from $9 and custom cakes from $50, with free delivery within ten kilometres.</p>`;
+const GUARANTEE = `<p>Not happy with something? We will replace it or refund you, no questions asked.</p>`;
+const PROOF = `<p>Loved by locals for more than 20 years and rated 4.9 stars from over 800 reviews on Google.</p>`;
 const DENSE = `<p>The organisational infrastructure facilitates comprehensive operationalisation of multidimensional methodologies, notwithstanding considerable interdepartmental heterogeneity and characteristically unpredictable environmental contingencies.</p>`;
 
 const HEALTHY_HTML = `<!doctype html><html lang="en"><head><title>Sunrise Bakery: fresh sourdough baked daily</title>
 <meta name="description" content="Sunrise Bakery bakes sourdough, pastries and custom cakes every morning in Melbourne. Order online for pickup or delivery within 10 km.">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="canonical" href="https://healthy-bakery.test/">
 <meta property="og:title" content="Sunrise Bakery"><meta property="og:image" content="https://healthy-bakery.test/og.jpg">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":["LocalBusiness","Bakery"],"name":"Sunrise Bakery","address":{"@type":"PostalAddress","streetAddress":"12 Baker Street","addressLocality":"Melbourne","addressRegion":"VIC","addressCountry":"AU"},"sameAs":["https://www.facebook.com/sunrisebakery","https://www.instagram.com/sunrisebakery"]}</script></head>
-<body><header><nav><a href="/menu">Menu</a><a href="/about">About</a><a href="/contact">Contact</a></nav></header>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":["LocalBusiness","Bakery"],"name":"Sunrise Bakery","address":{"@type":"PostalAddress","streetAddress":"12 Baker Street","addressLocality":"Melbourne","addressRegion":"VIC","addressCountry":"AU"},${RATING}"sameAs":["https://www.facebook.com/sunrisebakery","https://www.instagram.com/sunrisebakery"]}</script>${GTAG}</head>
+<body><header><nav><a href="/menu">Menu</a><a href="/about">About</a><a href="/contact">Contact</a>${BLOG_LINK}</nav></header>
 <h1>Fresh sourdough baked every morning in Melbourne</h1>
 <p>Sunrise Bakery is a family run bakery in Melbourne that bakes sourdough, pastries and custom celebration cakes from scratch every morning. Every loaf is made with a starter that is more than ten years old and slow fermented for two days, so the bread keeps longer and tastes better. Customers can order online for pickup or have it delivered within ten kilometres of the shop before nine o'clock.</p>
 ${STORY}
 <h2>How do I order a custom cake?</h2>
 <p>Choose a size and flavour on the order page at least three days ahead and we will confirm the design by email. Most cakes are ready the same afternoon you collect them and every order comes with a printed ingredient list for people with allergies, so nobody has to guess. Call the shop if you need a cake sooner than that.</p>
-<p>Loved by locals for more than 20 years and rated 4.9 stars from over 800 reviews on Google.</p>
+${PROOF}
+${OFFER}${GUARANTEE}${SIGNUP}
 <img src="loaf.jpg" alt="A sourdough loaf" width="640" height="480"><a href="/order">Order online</a><a href="tel:+61390000000">Call the shop</a>
 ${FOOTER_TRUST}<a href="https://www.facebook.com/sunrisebakery">Facebook</a><a href="https://www.instagram.com/sunrisebakery">Instagram</a><a href="https://www.linkedin.com/company/sunrise-bakery">LinkedIn</a></footer>
 </body></html>`;
@@ -69,6 +78,11 @@ const INNER_PAGES: Record<string, FixtureFile> = {
     "Contact us",
     ["Visit us at 12 Baker Street, Melbourne, or call the shop on 03 9000 0000 any morning between six and two. For large or custom orders it is best to ring at least three days ahead so that we can plan the baking, and we will confirm every order by email with the pickup time.",
      "Cafes and restaurants can order wholesale bread by emailing the shop, and we deliver across the inner suburbs before eight each day. If you have an allergy, tell us when you order and we will explain exactly how each item is made. We also take bookings for weddings, birthdays and office events, and we are always happy to talk through quantities and timing before you commit to anything."]),
+  "/blog": inner("Baking notes and recipes | Sunrise Bakery",
+    "Short guides from the Sunrise Bakery team on keeping sourdough fresh, feeding a starter at home and planning a celebration cake without stress.",
+    "Baking notes",
+    ["Our most read guide explains how to keep a sourdough loaf fresh for a week. Store it cut side down on a board for the first day, then wrap it in a clean cloth and keep it out of the fridge, which makes bread go stale faster. Slice and freeze what you will not eat in three days, and toast it straight from the freezer.",
+     "Another guide walks through feeding a starter at home, from the first mix of flour and water to the signs that it is ready to bake with. We also write about planning a celebration cake, with a simple timeline for choosing the size, the flavour and the design so that nothing is left to the last minute."]),
   "/privacy": inner("Privacy policy | Sunrise Bakery",
     "How Sunrise Bakery collects, uses and protects the personal details you give us when you order online, call the shop or sign up for our emails.",
     "Privacy policy",
@@ -170,6 +184,20 @@ export const FIXTURES: Record<string, Fixture> = {
   // The question is followed by another heading instead of an answer.
   "unanswered-question": healthy("unanswered-question", {
     html: HEALTHY_HTML.replace("<h2>How do I order a custom cake?</h2>\n<p>Choose a size", "<h2>How do I order a custom cake?</h2><h2>Prices</h2>\n<p>Choose a size"),
+  }),
+
+  // ---- Marketing: one missing piece each ----
+  "no-analytics": healthy("no-analytics", { html: HEALTHY_HTML.replace(GTAG, "") }),
+  "no-lead-capture": healthy("no-lead-capture", { html: HEALTHY_HTML.replace(SIGNUP, "") }),
+  "no-offer": healthy("no-offer", { html: HEALTHY_HTML.replace(OFFER, "") }),
+  "no-content-hub": healthy("no-content-hub", { html: HEALTHY_HTML.replace(BLOG_LINK, "") }),
+  "no-review-markup": healthy("no-review-markup", { html: HEALTHY_HTML.replace(RATING, "") }),
+  "no-guarantee": healthy("no-guarantee", { html: HEALTHY_HTML.replace(GUARANTEE, "") }),
+  // The only proof left is adjectives.
+  "vague-proof": healthy("vague-proof", { html: HEALTHY_HTML.replace(PROOF, "<p>Loved by our trusted happy customers.</p>") }),
+  // No phone and no contact page: only the address in the structured data is left.
+  "one-contact-route": healthy("one-contact-route", {
+    html: HEALTHY_HTML.replace('<a href="tel:+61390000000">Call the shop</a>', "").replace('<a href="/contact">Contact</a>', ""),
   }),
 
   // ---- Trust, depth and readability: one problem each ----

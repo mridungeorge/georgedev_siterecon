@@ -4,11 +4,12 @@ import { collectSnapshot, type PageFetcher, type SiteSnapshot } from "@/lib/snap
 import { runTechnicalChecks } from "@/lib/checks/technical";
 import { runGeoChecks } from "@/lib/checks/geo";
 import { runContentChecks } from "@/lib/checks/content";
+import { runMarketingChecks } from "@/lib/checks/marketing";
 import { runPerformanceChecks, type PageSpeedDeps } from "@/lib/checks/performance";
 import { runSocialChecks, type ProfileReader } from "@/lib/checks/social";
 import { composeProfileReaders } from "@/lib/social/instagram";
 import { findCompetitors } from "@/lib/competitors";
-import { generateIdeas } from "@/lib/ideas";
+import { generateIdeas, pickIdeaFindings } from "@/lib/ideas";
 import type { FetchClient } from "@/lib/fetch-client";
 import type { SearchFn } from "@/lib/search/tavily";
 import type { LlmClient } from "@/lib/llm/router";
@@ -50,7 +51,7 @@ export interface RunDeps {
   /** Ends the scan early (the visitor left, or the scan ran out of time). */
   signal?: AbortSignal;
   /** Most time, in ms, each outside-service step may take. Keeps a slow provider from using up the scan. */
-  stepBudgets?: { render?: number; content?: number; performance?: number; social?: number; competitors?: number; ideas?: number };
+  stepBudgets?: { render?: number; content?: number; marketing?: number; performance?: number; social?: number; competitors?: number; ideas?: number };
   /** Lets tests replace a module. Production uses the real checks. */
   modules?: Partial<Record<CheckModule, (s: SiteSnapshot) => CheckOutcome[]>>;
 }
@@ -79,8 +80,8 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   const throwIfCancelled = () => {
     if (deps.signal?.aborted) throw new Error("The scan was cancelled.");
   };
-  // Worst case, in seconds: fetch about 150, render 75, content 75, speed 60, social 45, competitors 90, ideas 45.
-  // That is 540, the whole-scan ceiling. In practice scans take a small fraction of this.
+  // Worst case, in seconds: fetch about 150, render 75, content 75, marketing 60, speed 60, social 45, competitors 90, ideas 45.
+  // That adds up to more than the 540-second whole-scan ceiling, so it is the ceiling that ends a scan where every step runs out. In practice scans take a small fraction of this.
   const budget = (ms: number) => (deps.signal ? AbortSignal.any([deps.signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms));
   const checks: Record<CheckModule, (s: SiteSnapshot) => CheckOutcome[]> = {
     technical: deps.modules?.technical ?? runTechnicalChecks,
@@ -154,6 +155,18 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   } catch (err) {
     modules.push(failedModule("content", errorText(err)));
     emit({ event: "step-warn", data: { step: "content", message: errorText(err) } });
+  }
+
+  throwIfCancelled();
+  emit({ event: "step-start", data: { step: "marketing" } });
+  try {
+    const marketing = await runMarketingChecks(snapshot, llm, budget(budgets.marketing ?? 60_000));
+    const result = buildModuleResult("marketing", marketing.outcomes, marketing.couldntCheck);
+    modules.push(result);
+    emit({ event: "step-done", data: { step: "marketing", message: summarise(result, marketing.outcomes.length) } });
+  } catch (err) {
+    modules.push(failedModule("marketing", errorText(err)));
+    emit({ event: "step-warn", data: { step: "marketing", message: errorText(err) } });
   }
 
   throwIfCancelled();
@@ -246,7 +259,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
   try {
     const result = await generateIdeas(
       llm,
-      { url: snapshot.home.finalUrl, summary: siteSummary(snapshot), findings: fixes },
+      { url: snapshot.home.finalUrl, summary: siteSummary(snapshot), findings: pickIdeaFindings(modules) },
       budget(budgets.ideas ?? 45_000),
     );
     ideas = result.ideas;

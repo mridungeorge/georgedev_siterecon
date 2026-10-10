@@ -19,7 +19,7 @@ const REPORT: Report = {
   pagesScanned: ["https://acme.example/"], injectionFlags: 0,
   ideas: [{ title: "Add a title tag", why: "Search results need one.", findingId: "technical:title", effort: "low" }],
   social: { profiles: [{ platform: "github", url: "https://github.com/acme", handle: "acme", kind: "profile", status: "found" }], missing: ["facebook", "instagram", "linkedin"], mentions: { hackerNews: 3 }, readerUsed: true },
-  competitors: { rows: [{ domain: "rival.example", url: "https://rival.example/", source: "ai", technical: 90, geo: 60, platforms: ["facebook"], passed: [] }], gaps: ["1 of 1 competitors score at least 10 points higher on SEO."], note: "Suggested by AI." },
+  competitors: { rows: [{ domain: "rival.example", url: "https://rival.example/", source: "ai", technical: 90, geo: 60, platforms: ["facebook"], title: "Rival", headline: "Storage for all", description: "Rival sells shelving.", passed: [] }], gaps: ["1 of 1 competitors score at least 10 points higher on SEO."], note: "Suggested by AI." },
   summary: {
     grade: "C", verdict: "Decent (C, 71/100). Strongest: SEO (80), weakest: Speed (40). 1 issue found, 1 of them a quick win.",
     strongest: { module: "technical", score: 80 }, weakest: { module: "performance", score: 40 },
@@ -31,8 +31,8 @@ const REPORT: Report = {
     content: '<link rel="canonical" href="https://acme.example/">', note: "Tells search engines which address is the main one.", forFindings: ["technical:title"],
   }],
   pageTable: [
-    { url: "https://acme.example/", title: "Acme", description: "Shelving for small homes.", h1: 1, words: 312, issues: 2 },
-    { url: "https://acme.example/about", title: "", description: "", h1: 0, words: 40, issues: 3 },
+    { url: "https://acme.example/", title: "Acme", description: "Shelving for small homes.", headline: "Shelving for small homes", h1: 1, words: 312, issues: 2 },
+    { url: "https://acme.example/about", title: "", description: "", headline: "", h1: 0, words: 40, issues: 3 },
   ],
 };
 

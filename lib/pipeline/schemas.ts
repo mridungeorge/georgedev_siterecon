@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ModuleNameSchema = z.enum(["technical", "geo", "content", "social", "competitors", "performance"]);
+export const ModuleNameSchema = z.enum(["technical", "geo", "content", "marketing", "social", "competitors", "performance"]);
 export const SeveritySchema = z.enum(["critical", "high", "medium", "low"]);
 export const EffortSchema = z.enum(["low", "medium", "high"]);
 
@@ -65,6 +65,10 @@ export const CompetitorRowSchema = z.object({
   technical: z.number().nullable(),
   geo: z.number().nullable(),
   platforms: z.array(PlatformSchema),
+  /** How the competitor presents itself, cut short. Reports stored before this existed have none. */
+  title: z.string().default(""),
+  headline: z.string().default(""),
+  description: z.string().default(""),
   /** Ids of the SEO and AI-visibility checks this competitor passes. Reports stored before this existed have none. */
   passed: z.array(z.string()).default([]),
 });
@@ -91,6 +95,8 @@ export const PageRowSchema = z.object({
   url: z.string(),
   title: z.string(),
   description: z.string(),
+  /** The text of the first H1. Reports stored before this existed have none. */
+  headline: z.string().default(""),
   h1: z.number().int().min(0),
   words: z.number().int().min(0),
   issues: z.number().int().min(0),

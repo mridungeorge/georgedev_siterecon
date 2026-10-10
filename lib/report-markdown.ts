@@ -5,7 +5,7 @@ import type { Finding, Report } from "@/lib/pipeline/schemas";
 // escaped, and anything that is a URL or a quotation goes in a code span, where nothing is interpreted.
 
 const MODULE_LABEL: Record<string, string> = {
-  technical: "SEO", geo: "AI visibility", content: "Content and conversion", performance: "Speed", social: "Social media", competitors: "Competitors",
+  technical: "SEO", geo: "AI visibility", content: "Content and conversion", marketing: "Marketing", performance: "Speed", social: "Social media", competitors: "Competitors",
 };
 
 /** Plain text, safe to put in a Markdown line or a table cell. */
@@ -109,6 +109,16 @@ export function reportToMarkdown(report: Report): string {
     out.push("");
     for (const gap of report.competitors.gaps) out.push(`- ${esc(gap)}`);
     out.push("");
+    if (report.competitors.rows.some((r) => r.headline || r.description)) {
+      out.push("### How they position themselves", "");
+      const own = report.pageTable[0];
+      const say = (name: string, headline: string, description: string) => {
+        if (headline || description) out.push(`- **${esc(name)}**: ${[headline, description].filter(Boolean).map(esc).join(" — ")}`);
+      };
+      say(`${report.domain} (you)`, own?.headline ?? "", own?.description ?? "");
+      for (const row of report.competitors.rows) say(row.domain, row.headline, row.description);
+      out.push("");
+    }
   }
 
   if (report.social) {

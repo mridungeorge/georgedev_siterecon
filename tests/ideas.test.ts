@@ -51,3 +51,43 @@ describe("generateIdeas", () => {
     expect(calls[0].jsonOnly).toBe(true);
   });
 });
+
+import { pickIdeaFindings } from "@/lib/ideas";
+import type { ModuleName, ModuleResult, Severity } from "@/lib/pipeline/schemas";
+
+describe("pickIdeaFindings (which findings the ideas are built from)", () => {
+  const f = (module: ModuleName, n: number, severity: Severity = "medium"): Finding => ({
+    id: `${module}:c${n}`, module, severity, effort: "low", title: `${module} ${n}`, detail: "d", fix: "f", evidence: [{ url: "https://example.com/", note: "n" }],
+  });
+  const mod = (module: ModuleName, findings: Finding[]): ModuleResult => ({ module, status: "ok", score: 50, findings, passed: [], couldntCheck: [] });
+  const range = (module: ModuleName, count: number) => Array.from({ length: count }, (_, i) => f(module, i));
+
+  it("starts with the marketing findings, then content and social, and only then SEO and speed", () => {
+    const picked = pickIdeaFindings([mod("technical", range("technical", 3)), mod("performance", range("performance", 2)), mod("marketing", range("marketing", 2)), mod("social", range("social", 1)), mod("content", range("content", 1))]);
+    expect(picked.map((x) => x.module)).toEqual(["marketing", "marketing", "content", "social", "technical", "technical", "technical", "performance", "performance"]);
+  });
+
+  it("never lets one module take more than five places, so the ideas stay varied", () => {
+    const picked = pickIdeaFindings([mod("marketing", range("marketing", 9)), mod("technical", range("technical", 9))]);
+    expect(picked.filter((x) => x.module === "marketing")).toHaveLength(5);
+    expect(picked.filter((x) => x.module === "technical")).toHaveLength(5);
+    expect(picked).toHaveLength(10);
+  });
+
+  it("never returns more than twelve, however many findings there are", () => {
+    const picked = pickIdeaFindings([mod("marketing", range("marketing", 9)), mod("technical", [f("technical", 0, "low"), ...range("technical", 3).slice(1).map((x) => ({ ...x, severity: "critical" as Severity }))])]);
+    expect(picked.length).toBeLessThanOrEqual(12);
+    expect(picked.filter((x) => x.module === "marketing").length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("puts the most severe findings of a module first", () => {
+    const picked = pickIdeaFindings([mod("marketing", [f("marketing", 0, "low"), f("marketing", 1, "critical"), f("marketing", 2, "high")])]);
+    expect(picked.map((x) => x.severity)).toEqual(["critical", "high", "low"]);
+  });
+
+  it("is empty when there are no findings, and deterministic", () => {
+    expect(pickIdeaFindings([mod("marketing", [])])).toEqual([]);
+    const m = [mod("marketing", range("marketing", 3)), mod("technical", range("technical", 2))];
+    expect(pickIdeaFindings(m)).toEqual(pickIdeaFindings(m));
+  });
+});

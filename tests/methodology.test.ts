@@ -5,7 +5,7 @@ import { MODULE_WEIGHTS } from "@/lib/scoring";
 describe("rubricTable (the /methodology page is built from the real checks)", () => {
   it("lists every scored module with check weights that add up to 100", async () => {
     const table = await rubricTable();
-    expect(table.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance", "social"]);
+    expect(table.map((m) => m.module)).toEqual(["technical", "geo", "content", "marketing", "performance", "social"]);
     for (const m of table) {
       expect(m.checks.length, m.module).toBeGreaterThan(3);
       expect(m.checks.reduce((sum, c) => sum + c.weight, 0), `${m.module} weights`).toBe(100);

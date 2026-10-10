@@ -23,6 +23,7 @@ describe("runScan", () => {
       "step-start:technical", "step-done:technical",
       "step-start:geo", "step-done:geo",
       "step-start:content", "step-done:content",
+      "step-start:marketing", "step-done:marketing",
       "step-start:performance", "step-warn:performance", // PageSpeed is not configured in this test
       "step-start:social", "step-done:social",
       "step-start:competitors", "step-warn:competitors", // no AI and no search in this test
@@ -32,7 +33,7 @@ describe("runScan", () => {
     expect(report.id).toBe("id-1");
     expect(report.domain).toBe("example.com");
     expect(report.pagesScanned).toEqual([`${O}/`, `${O}/about`]);
-    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance", "social"]);
+    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "marketing", "performance", "social"]);
     expect(report.overallScore).toBeGreaterThan(0);
     expect(report.topFixes.length).toBeGreaterThan(0);
     expect(report.topFixes.length).toBeLessThanOrEqual(10);

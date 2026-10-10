@@ -4,6 +4,7 @@ import { MODULE_WEIGHTS } from "@/lib/scoring";
 import { runTechnicalChecks } from "@/lib/checks/technical";
 import { runGeoChecks } from "@/lib/checks/geo";
 import { RUBRIC, runContentChecks } from "@/lib/checks/content";
+import { MARKETING_RUBRIC, runMarketingChecks } from "@/lib/checks/marketing";
 import { runPerformanceChecks } from "@/lib/checks/performance";
 import { runSocialChecks } from "@/lib/checks/social";
 
@@ -21,7 +22,7 @@ export interface ModuleRubric {
   checks: RubricCheck[];
 }
 
-const LABELS: Record<string, string> = {
+export const LABELS: Record<string, string> = {
   // SEO
   "status-ok": "The homepage returns HTTP 200", https: "The site is served over HTTPS",
   indexable: "The page is not blocked from search (no noindex)", title: "Has a title tag",
@@ -57,6 +58,20 @@ const LABELS: Record<string, string> = {
   // Content and conversion
   "cta-present": "Has a clear call to action", "headline-clear": "The headline is 3 to 20 words", "contact-info": "Has a way to contact the business",
   "trust-signals": "Shows social proof (reviews, ratings, guarantees)", navigation: "Has a menu with three or more links",
+  analytics: "An analytics or advertising tag is installed, so marketing can be measured",
+  "lead-capture": "A visitor can leave an email, book or request a quote",
+  "offer-clarity": "A price, offer or pricing link is visible",
+  "content-hub": "Links to a blog, guides or other published content",
+  "reviews-markup": "Reviews and ratings are marked up or use a review widget",
+  "risk-reversal": "A guarantee, free returns, trial or no-obligation offer lowers the buyer's risk",
+  "specific-proof": "Proof is specific: a number, a rating, years in business or a named testimonial",
+  "contact-channels": "At least two ways to contact the business",
+  "benefits-first": "AI review: the copy leads with what the customer gets",
+  "customer-problem": "AI review: the customer's problem is named",
+  objections: "AI review: likely doubts are answered near the call to action",
+  "next-step-reward": "AI review: it is clear what the next step delivers",
+  "message-focus": "AI review: the first screen carries one main message",
+  voice: "AI review: the writing is specific and in plain language",
   "about-page": "Links to an About, team or company-story page on the same site", "policy-pages": "Links to a privacy policy",
   "content-depth": "The homepage has at least 300 words of copy outside the menu and footer",
   readability: "The copy is easy to read (Flesch reading ease of 50 or more)",
@@ -76,12 +91,13 @@ const SOURCES: Record<ModuleRubric["module"], string> = {
   technical: "A plain fetch of the homepage and up to ten inner pages, robots.txt, the sitemap and the response headers. No AI.",
   geo: "The same fetch, read for AI search crawler rules (ChatGPT search, Claude search, Perplexity, Google), the text in the HTML, structured data and dates. Blocking an AI training crawler such as GPTBot is shown as a choice, never as a problem. No AI.",
   content: "Fixed checks on the page text (80 points), plus a small AI review (20 points). The AI's answers only count when they quote a specific passage that is really on the page.",
+  marketing: "Fixed checks on the page's own HTML (70 points): measurement tags, lead capture, a visible offer, a content hub, review markup, risk reversal, specific proof and contact channels. Plus a messaging review by AI (30 points) whose answers only count when they quote a specific passage that is really on the page.",
   performance: "Google PageSpeed Insights, one mobile lab run. Needs a free API key. Each vital earns full marks when good, half in Google's needs-improvement band and none when poor; the overall speed score earns its share in proportion.",
   social: "Social links found on the homepage, then each public profile page read without logging in. Pages that need a login are reported as unchecked. When a public page states its audience in the description it shows to anyone (for example Facebook's \"621,509 followers\"), that count is shown. Instagram business and creator accounts are read through Meta's official API when the server owner has connected one, which adds their follower count and latest post.",
 };
 
 const LABEL: Record<ModuleRubric["module"], string> = {
-  technical: "SEO", geo: "AI visibility", content: "Content and conversion", performance: "Speed", social: "Social media",
+  technical: "SEO", geo: "AI visibility", content: "Content and conversion", marketing: "Marketing", performance: "Speed", social: "Social media",
 };
 
 const blank = (body = "<html><head></head><body></body></html>"): SiteSnapshot => ({
@@ -105,6 +121,7 @@ const toChecks = (outcomes: CheckOutcome[]): RubricCheck[] =>
 
 export async function rubricTable(): Promise<ModuleRubric[]> {
   const content = await runContentChecks(blank(), null);
+  const marketing = await runMarketingChecks(blank(), null);
   const performance = await runPerformanceChecks("https://example.com/", {
     apiKey: "docs", quotaOk: () => true, fetchJson: async () => PERFECT_PSI,
   });
@@ -119,6 +136,7 @@ export async function rubricTable(): Promise<ModuleRubric[]> {
     ["technical", toChecks(runTechnicalChecks(blank()))],
     ["geo", toChecks(runGeoChecks(blank()))],
     ["content", [...toChecks(content.outcomes), ...RUBRIC.map((r) => ({ id: r.id, weight: 5, label: LABELS[r.id] ?? "", ai: true }))]],
+    ["marketing", [...toChecks(marketing.outcomes), ...MARKETING_RUBRIC.map((r) => ({ id: r.id, weight: 5, label: LABELS[r.id] ?? "", ai: true }))]],
     ["performance", toChecks(performance.outcomes)],
     ["social", toChecks(social.outcomes)],
   ];

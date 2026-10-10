@@ -9,7 +9,7 @@ import { reportToMarkdown } from "@/lib/report-markdown";
 // and is rendered as React text, never as HTML.
 
 const MODULE_LABEL: Record<ModuleResult["module"], string> = {
-  technical: "SEO", geo: "AI visibility", content: "Content and conversion",
+  technical: "SEO", geo: "AI visibility", content: "Content and conversion", marketing: "Marketing",
   social: "Social", competitors: "Competitors", performance: "Speed",
 };
 const SEVERITY_COLOR: Record<Finding["severity"], string> = {
@@ -275,7 +275,7 @@ export default function ReportView({ report, permalink = true }: { report: Repor
                   <span className="shrink-0 font-mono text-[11px] text-muted">{idea.effort} effort</span>
                 </div>
                 <p className="mt-1 text-sm leading-relaxed text-ink-soft">{idea.why}</p>
-                <p className="mt-2 font-mono text-[11px] text-muted">addresses: {report.topFixes.find((f) => f.id === idea.findingId)?.title ?? idea.findingId}</p>
+                <p className="mt-2 font-mono text-[11px] text-muted">addresses: {findingById.get(idea.findingId)?.title ?? idea.findingId}</p>
               </li>
             ))}
           </ul>
@@ -310,6 +310,23 @@ export default function ReportView({ report, permalink = true }: { report: Repor
             </table>
           </div>
           <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-ink-soft">{report.competitors.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul>
+          {report.competitors.rows.some((r) => r.headline || r.description) && (
+            <div className="mt-5">
+              <p className="font-mono text-xs text-muted">How they position themselves</p>
+              <ul className="mt-2 space-y-3 text-sm">
+                {[
+                  { domain: `${report.domain} (you)`, headline: report.pageTable[0]?.headline ?? "", description: report.pageTable[0]?.description ?? "" },
+                  ...report.competitors.rows,
+                ].map((r) => (
+                  <li key={r.domain} className="border-t border-line pt-2">
+                    <span className="font-mono text-xs text-ink break-all">{r.domain}</span>
+                    {r.headline && <p className="mt-0.5 text-ink">{r.headline}</p>}
+                    {r.description && <p className="mt-0.5 text-ink-soft">{r.description}</p>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

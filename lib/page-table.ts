@@ -27,6 +27,7 @@ export function buildPageTable(s: SiteSnapshot, modules: ModuleResult[]): PageRo
       url: facts.url,
       title: facts.title.slice(0, 120),
       description: facts.description.slice(0, 160),
+      headline: facts.h1Text.slice(0, 120),
       h1: facts.h1,
       words: facts.words,
       issues: issues.get(key(facts.url)) ?? 0,

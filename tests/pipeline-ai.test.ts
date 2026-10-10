@@ -41,14 +41,16 @@ describe("runScan with the AI and PageSpeed modules", () => {
     const report = await run(HOME, { llm, pagespeed }, events);
 
     expect(events.filter((e) => e.event === "step-start").map((e) => e.data.step)).toEqual([
-      "fetch", "render", "technical", "geo", "content", "performance", "social", "competitors", "synthesis",
+      "fetch", "render", "technical", "geo", "content", "marketing", "performance", "social", "competitors", "synthesis",
     ]);
     expect(() => ReportSchema.parse(report)).not.toThrow();
-    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance", "social"]);
+    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "marketing", "performance", "social"]);
     expect(report.modules.find((m) => m.module === "performance")!.score).toBe(100);
     expect(report.modules.find((m) => m.module === "content")!.score).not.toBeNull();
     expect(report.ideas).toHaveLength(1);
-    expect(report.topFixes.map((f) => f.id)).toContain(report.ideas[0].findingId);
+    // Ideas now start from the marketing findings, which need not be among the ten most severe overall.
+    expect(report.modules.flatMap((m) => m.findings).map((f) => f.id)).toContain(report.ideas[0].findingId);
+    expect(report.ideas[0].findingId).toMatch(/^marketing:/);
     expect(report.injectionFlags).toBe(0);
   });
 
@@ -80,7 +82,7 @@ describe("runScan with the AI and PageSpeed modules", () => {
 
   it("works with no AI and no PageSpeed at all, like the first version did", async () => {
     const report = await run(HOME, { llm: null, pagespeed: null });
-    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "performance", "social"]);
+    expect(report.modules.map((m) => m.module)).toEqual(["technical", "geo", "content", "marketing", "performance", "social"]);
     expect(report.overallScore).not.toBeNull();
   });
 

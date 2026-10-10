@@ -4,7 +4,7 @@ import type { Effort, Finding, ModuleName, ModuleResult, ReportSummary, Severity
 // checks did not find, and the same findings always give the same words.
 
 const MODULE_LABEL: Record<ModuleName, string> = {
-  technical: "SEO", geo: "AI visibility", content: "Content and conversion", social: "Social media", competitors: "Competitors", performance: "Speed",
+  technical: "SEO", geo: "AI visibility", content: "Content and conversion", marketing: "Marketing", social: "Social media", competitors: "Competitors", performance: "Speed",
 };
 const SEVERITY_RANK: Record<Severity, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 const QUICK_WIN_SEVERITIES = new Set<Severity>(["critical", "high", "medium"]);
