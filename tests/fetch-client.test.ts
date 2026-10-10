@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createFetchClient } from "@/lib/fetch-client";
 import { countHackerNewsMentions } from "@/lib/mentions";
 import { createTavilySearch } from "@/lib/search/tavily";
@@ -84,5 +84,20 @@ describe("createTavilySearch", () => {
   it("returns nothing when the request fails", async () => {
     const search = createTavilySearch({ apiKey: "k", db: openDb(":memory:"), fetch: fake(() => ({ status: 429 })).impl });
     expect(await search("q")).toEqual([]);
+  });
+  it.each([401, 403, 432, 429])("logs the status when Tavily answers %i, so a bad key is visible to the operator, and never logs the key", async (status) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const search = createTavilySearch({ apiKey: "tv-secret-key", db: openDb(":memory:"), fetch: fake(() => ({ status })).impl });
+    expect(await search("q")).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain(`HTTP ${status}`);
+    expect(String(warn.mock.calls[0][0])).not.toContain("tv-secret-key");
+    warn.mockRestore();
+  });
+  it("logs nothing for a successful search", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await createTavilySearch({ apiKey: "k", db: openDb(":memory:"), fetch: fake(() => ({ body: { results: [] } })).impl })("q");
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
