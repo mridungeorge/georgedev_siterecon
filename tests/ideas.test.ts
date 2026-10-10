@@ -91,3 +91,27 @@ describe("pickIdeaFindings (which findings the ideas are built from)", () => {
     expect(pickIdeaFindings(m)).toEqual(pickIdeaFindings(m));
   });
 });
+
+describe("generateIdeas retry", () => {
+  const good = JSON.stringify({ ideas: [{ title: "Fix titles", why: "w", findingId: "technical:a", effort: "low" }] });
+  it("asks again once when the first answer cannot be read, so one cut-off reply does not lose the ideas", async () => {
+    let calls = 0;
+    const llm: LlmClient = async () => ({ content: calls++ === 0 ? '{"ideas":[{"title":"Fix ti' : good, provider: "nim", model: "m" });
+    const r = await generateIdeas(llm, input);
+    expect(calls).toBe(2);
+    expect(r.ideas.map((i) => i.title)).toEqual(["Fix titles"]);
+  });
+  it("does not retry when the providers are down", async () => {
+    let calls = 0;
+    const llm: LlmClient = async () => { calls++; throw new LlmUnavailableError("down"); };
+    await generateIdeas(llm, input);
+    expect(calls).toBe(1);
+  });
+  it("gives up after the second unreadable answer", async () => {
+    let calls = 0;
+    const llm: LlmClient = async () => { calls++; return { content: "sorry", provider: "nim", model: "m" }; };
+    const r = await generateIdeas(llm, input);
+    expect(calls).toBe(2);
+    expect(r.couldntCheck[0].what).toBe("Marketing ideas");
+  });
+});

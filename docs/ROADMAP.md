@@ -79,9 +79,17 @@ Added after that, in the same way (23 then 26 fixture sites, 74 seeded problems,
 
 - **Content and E-E-A-T checks with no AI**: an About page, a privacy policy, 300 words of real copy, readability, and a copyright year that is not stale. The eval caught that LinkedIn company links were passing the About check, so it now counts only the site's own links.
 - **A table of every page read**: title, H1 count, word count and how many findings point at each page, also in the Markdown export.
-- **Competitor comparison by check**: it now says which problems most competitors do not have ("3 of 3 competitors do not have this problem: ...").
+- **Competitor comparison by check**: it now says which problems most competitors do not have ("3 of 3 competitors pass this check and you do not: ...").
 - **Three probes** (only when they can be made, and not run on competitors): http:// redirecting to https://, the www and non-www spellings, and whether a page that does not exist returns 404.
 - **Parsing of model answers**: the model sometimes answers with one JSON object per item instead of a list. Reading only the first threw most ideas away without an error. All objects are now read, with a cap on reply size and restarts.
+
+Marketing module and sharper competitors (2026-10-10; 37 fixture sites, 87 seeded problems, 0 false positives):
+
+- **A Marketing module** with its own score (20% of the overall). Eight checks that use no AI: analytics tag, a way to leave an email or book, a stated offer or price, a blog or guides hub, review markup, a guarantee or risk-reversal line, specific proof (numbers, ratings, years) and at least two ways to get in touch. The eval caught two false results, a phrase like "from over 800 reviews" being read as a price and a newsletter box counting as a contact route; both are fixed and tested.
+- **An AI messaging review** (benefits first, the customer's problem, objections, the reward for the next step, one focus, a consistent voice). An answer only counts if the model quotes words that are really on the page, and the model's own wording is never shown.
+- **Competitors show how they position themselves** (title, headline, description), are searched for by what your site is and where it trades, and the gap lines use plain check names.
+- **Marketing ideas start from the marketing findings**, then content and social, then SEO and speed, with at most five from any module. An unreadable model answer is retried once.
+- **The portfolio view** now shows the Marketing score, expandable findings with evidence, ideas, the roadmap, social profiles, competitor positioning and the pages table.
 
 Not done yet:
 

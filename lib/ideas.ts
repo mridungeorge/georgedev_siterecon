@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { EffortSchema, type CouldntCheck, type Finding, type Idea, type ModuleName, type ModuleResult } from "@/lib/pipeline/schemas";
 import { wrapUntrusted } from "@/lib/injection";
-import { listFromReply, type LlmClient } from "@/lib/llm/router";
+import { listFromReply, LlmUnavailableError, type LlmClient } from "@/lib/llm/router";
 import { clip } from "@/lib/checks/helpers";
 
 export const MAX_IDEAS = 8;
@@ -61,20 +61,26 @@ export async function generateIdeas(
   const unavailable = (why: string) => ({ ideas: [] as Idea[], couldntCheck: [{ what: "Marketing ideas", why: clip(why, 200) }] });
   if (!llm) return unavailable("no AI provider is available");
 
-  let raw: unknown[];
-  try {
-    const list = input.findings.map((f) => `- ${f.id} [${f.severity}] ${f.title}`).join("\n");
-    const reply = await llm({
-      system: SYSTEM,
-      user: `Site: ${input.url}\n\nProblems found:\n${list}\n\nSite summary:\n${wrapUntrusted(input.summary, 2000)}`,
-      jsonOnly: true,
-      maxTokens: 1200,
-      signal,
-    });
-    // The model may answer with one object per idea, so the lists in every object are joined.
-    raw = listFromReply(reply.content, "ideas");
-  } catch (err) {
-    return unavailable(err instanceof Error ? err.message : "the AI request failed");
+  let raw: unknown[] = [];
+  const list = input.findings.map((f) => `- ${f.id} [${f.severity}] ${f.title}`).join("\n");
+  // A reply cut off part-way is the usual cause of an unreadable answer, so a second try is worth one more call.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const reply = await llm({
+        system: SYSTEM,
+        user: `Site: ${input.url}\n\nProblems found:\n${list}\n\nSite summary:\n${wrapUntrusted(input.summary, 2000)}`,
+        jsonOnly: true,
+        maxTokens: 1800,
+        signal,
+      });
+      // The model may answer with one object per idea, so the lists in every object are joined.
+      raw = listFromReply(reply.content, "ideas");
+      break;
+    } catch (err) {
+      if (signal?.aborted || err instanceof LlmUnavailableError || attempt === 1) {
+        return unavailable(err instanceof Error ? err.message : "the AI request failed");
+      }
+    }
   }
 
   const known = new Set(input.findings.map((f) => f.id));
