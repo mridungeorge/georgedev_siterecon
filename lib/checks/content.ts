@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { SiteSnapshot } from "@/lib/snapshot";
 import type { CheckOutcome, CouldntCheck } from "@/lib/pipeline/schemas";
 import { countInjectionAttempts, wrapUntrusted } from "@/lib/injection";
-import { extractJson, type LlmClient } from "@/lib/llm/router";
+import { listFromReply, type LlmClient } from "@/lib/llm/router";
 import { clip, makeChecker } from "./helpers";
 import { readingEase } from "./readability";
 
@@ -231,7 +231,8 @@ export async function runContentChecks(s: SiteSnapshot, llm: LlmClient | null, s
   const prompt = `Review this homepage.\n\n${wrapUntrusted(`Address: ${url}\nTitle: ${title}\nDescription: ${description}\nHeadline: ${h1}\n\nPage text:\n${bodyText}`)}`;
   const ask = async (user: string): Promise<Items> => {
     const reply = await llm({ system: SYSTEM, user, jsonOnly: true, maxTokens: 1200, signal });
-    const parsed = AnswerSchema.safeParse(extractJson(reply.content));
+    // The model may answer with one object per question, so the lists in every object are joined.
+    const parsed = AnswerSchema.safeParse({ items: listFromReply(reply.content, "items") });
     if (!parsed.success) throw new Error("the AI returned an answer in an unexpected format");
     return parsed.data.items;
   };

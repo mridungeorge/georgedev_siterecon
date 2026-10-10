@@ -65,6 +65,8 @@ export const CompetitorRowSchema = z.object({
   technical: z.number().nullable(),
   geo: z.number().nullable(),
   platforms: z.array(PlatformSchema),
+  /** Ids of the SEO and AI-visibility checks this competitor passes. Reports stored before this existed have none. */
+  passed: z.array(z.string()).default([]),
 });
 export type CompetitorRow = z.infer<typeof CompetitorRowSchema>;
 
@@ -83,6 +85,17 @@ export const ModuleResultSchema = z.object({
   passed: z.array(z.string()),
   couldntCheck: z.array(CouldntCheckSchema),
 });
+
+/** One page that was read: what it says about itself and how many findings point at it. */
+export const PageRowSchema = z.object({
+  url: z.string(),
+  title: z.string(),
+  description: z.string(),
+  h1: z.number().int().min(0),
+  words: z.number().int().min(0),
+  issues: z.number().int().min(0),
+});
+export type PageRow = z.infer<typeof PageRowSchema>;
 
 /** A short plain-language read on the whole report and a plan for fixing it, worked out from the findings alone. */
 export const ReportSummarySchema = z.object({
@@ -131,6 +144,8 @@ export const ReportSchema = z.object({
   competitors: CompetitorTableSchema.nullable().default(null),
   summary: ReportSummarySchema.nullable().default(null),
   fixKit: z.array(FixKitItemSchema).default([]),
+  /** One row per page read, homepage first. Reports stored before this existed have none. */
+  pageTable: z.array(PageRowSchema).default([]),
 });
 
 export type ModuleName = z.infer<typeof ModuleNameSchema>;

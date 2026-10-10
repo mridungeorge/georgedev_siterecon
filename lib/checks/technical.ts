@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import type { SiteSnapshot } from "@/lib/snapshot";
-import type { SafeResponse } from "@/lib/safe-fetch";
 import type { CheckOutcome, Evidence } from "@/lib/pipeline/schemas";
+import { pageFacts, type PageFacts } from "@/lib/page-facts";
 import { clip, makeChecker } from "./helpers";
 import { readJsonLd, schemaProblems } from "./jsonld";
 
@@ -28,17 +28,6 @@ function sitemapLocs(xml: string): string[] {
   const re = /<loc>\s*([^<]*?)\s*<\/loc>/gi;
   for (let m = re.exec(xml); m; m = re.exec(xml)) if (m[1]) locs.push(m[1]);
   return locs;
-}
-
-interface PageFacts { url: string; title: string; description: string; h1: number; words: number }
-function pageFacts(res: SafeResponse): PageFacts {
-  const $ = cheerio.load(res.body);
-  const title = $("head > title").first().text().replace(/\s+/g, " ").trim();
-  const description = ($('meta[name="description" i]').attr("content") ?? "").replace(/\s+/g, " ").trim();
-  const h1 = $("h1").length;
-  $("script, style, noscript, template, svg").remove();
-  const words = $("body").text().split(/\s+/).filter(Boolean).length;
-  return { url: res.finalUrl, title, description, h1, words };
 }
 
 const MAX_EVIDENCE = 6;
@@ -321,6 +310,40 @@ export function runTechnicalChecks(s: SiteSnapshot): CheckOutcome[] {
     fix: "Update each link to the page's current address, or remove it. If a page moved, add a 301 redirect from the old address.",
     evidence: brokenLinks.slice(0, 8).map((b): Evidence => ({ url: b.url, note: `returned HTTP ${b.status}` })),
   });
+
+  // ---- How the site answers requests it should redirect or reject. Only when a probe could be made ----
+  const probes = s.probes;
+  if (probes?.http) {
+    const stays = !probes.http.finalUrl.startsWith("https://");
+    check("https-redirect", 3, !stays, {
+      severity: "high", effort: "low",
+      title: "The http:// address does not redirect to https://",
+      detail: "Anyone who types the address without https, or follows an old link, lands on an unencrypted copy of the site. Browsers warn them, and search engines see two versions of every page.",
+      fix: "Redirect every http:// address to its https:// equivalent with a permanent (301) redirect at the web server or CDN.",
+      evidence: [{ url: `http://${new URL(url).host}/`, note: `ends at ${probes.http.finalUrl} (HTTP ${probes.http.status}) instead of https://` }],
+    });
+  }
+  if (probes?.alternateHost) {
+    const mainHost = new URL(url).hostname.toLowerCase();
+    const altFinal = new URL(probes.alternateHost.finalUrl).hostname.toLowerCase();
+    const altStart = new URL(probes.alternateHost.url).hostname.toLowerCase();
+    check("host-redirect", 3, altFinal === mainHost, {
+      severity: "medium", effort: "low",
+      title: `Both ${altStart} and ${mainHost} serve the site`,
+      detail: "When the www and non-www addresses both answer, search engines treat them as two copies of the site and split its ranking between them. One should redirect to the other.",
+      fix: `Pick one address and redirect the other to it with a permanent (301) redirect. The canonical link and the sitemap should use the same one.`,
+      evidence: [{ url: probes.alternateHost.url, note: `serves the site itself (HTTP ${probes.alternateHost.status}) instead of redirecting to ${mainHost}` }],
+    });
+  }
+  if (probes?.notFound && [200, 404, 410].includes(probes.notFound.status)) {
+    check("soft-404", 3, probes.notFound.status !== 200, {
+      severity: "medium", effort: "medium",
+      title: "A page that does not exist returns 200 instead of 404",
+      detail: "When missing pages answer 'OK', search engines index the empty error pages as real content and can treat the whole site as low quality. Visitors who mistype an address also get no clear sign something is wrong.",
+      fix: "Make the server return the 404 status code for addresses that do not exist, whatever the error page looks like.",
+      evidence: [{ url: `${s.origin}/siterecon-check-missing-page`, note: "a made-up address returned HTTP 200" }],
+    });
+  }
 
   // ---- Only when a sitemap exists: is it any good? ----
   if (s.sitemapXml !== null && !/<sitemapindex[\s>]/i.test(s.sitemapXml)) {

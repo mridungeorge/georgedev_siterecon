@@ -111,6 +111,7 @@ export default function ReportView({ report, permalink = true }: { report: Repor
     "scores",
     hasRoadmap ? "roadmap" : null,
     "fixes",
+    report.pageTable.length > 0 ? "pages" : null,
     report.fixKit.length > 0 ? "kit" : null,
     report.ideas.length > 0 ? "ideas" : null,
     report.competitors && report.competitors.rows.length > 0 ? "competitors" : null,
@@ -216,6 +217,43 @@ export default function ReportView({ report, permalink = true }: { report: Repor
           {report.topFixes.length === 0 && <p className="text-sm text-muted">No issues found in the areas checked.</p>}
         </div>
       </div>
+
+      {report.pageTable.length > 0 && (
+        <div>
+          <SectionLabel n={n("pages")}>Pages read ({report.pageTable.length})</SectionLabel>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">Every page SiteRecon read, and what each says about itself. Cells in red are worth fixing.</p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[40rem] text-left text-xs">
+              <thead className="font-mono text-muted">
+                <tr>
+                  <th className="py-1 pr-4 font-normal">Page</th><th className="py-1 pr-4 font-normal">Title</th><th className="py-1 pr-4 font-normal">H1</th>
+                  <th className="py-1 pr-4 font-normal">Words</th><th className="py-1 font-normal">Issues</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono text-ink-soft">
+                {report.pageTable.map((p) => {
+                  let path = p.url;
+                  try {
+                    const u = new URL(p.url);
+                    path = u.pathname + u.search || "/";
+                  } catch {
+                    // keep the full address
+                  }
+                  return (
+                    <tr key={p.url} className="border-t border-line align-top">
+                      <td className="max-w-[14rem] break-all py-1.5 pr-4 text-ink">{path}</td>
+                      <td className={`max-w-[18rem] py-1.5 pr-4 ${p.title ? "" : "text-alert"}`}>{p.title || "none"}</td>
+                      <td className={`py-1.5 pr-4 tabular-nums ${p.h1 === 1 ? "" : "text-alert"}`}>{p.h1}</td>
+                      <td className={`py-1.5 pr-4 tabular-nums ${p.words >= 100 ? "" : "text-alert"}`}>{p.words}</td>
+                      <td className={`py-1.5 tabular-nums ${p.issues === 0 ? "text-live" : ""}`}>{p.issues}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {report.fixKit.length > 0 && (
         <div>

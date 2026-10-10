@@ -134,3 +134,74 @@ describe("collectSnapshot", () => {
     expect(snapshot.pages.map((p) => p.finalUrl)).toEqual(["https://www.example.org/x"]);
   });
 });
+
+describe("collectSnapshot probes (redirects and missing pages)", () => {
+  const home = (body = "<html><body>hi</body></html>") => page(`${O}/`, body);
+  const calls = () => {
+    const seen: string[] = [];
+    const wrap = (f: PageFetcher): PageFetcher => async (url, s) => { seen.push(url); return f(url, s); };
+    return { seen, wrap };
+  };
+
+  it("asks the http:// address where it goes, the other www spelling, and a page that does not exist", async () => {
+    const { seen, wrap } = calls();
+    const { fetchPage } = site({
+      [`${O}/`]: home(),
+      "http://example.com/": page("http://example.com/", "<html>hi</html>", { finalUrl: `${O}/` }),
+      "https://www.example.com/": page("https://www.example.com/", "<html>hi</html>", { finalUrl: `${O}/` }),
+      [`${O}/siterecon-check-missing-page`]: page(`${O}/siterecon-check-missing-page`, "gone", { status: 404 }),
+    });
+    const { snapshot } = await collectSnapshot(new URL(`${O}/`), wrap(fetchPage));
+    expect(seen).toEqual(expect.arrayContaining(["http://example.com/", "https://www.example.com/", `${O}/siterecon-check-missing-page`]));
+    expect(snapshot.probes).toEqual({
+      http: { finalUrl: `${O}/`, status: 200 },
+      alternateHost: { url: "https://www.example.com/", finalUrl: `${O}/`, status: 200 },
+      notFound: { status: 404 },
+    });
+  });
+
+  it("probes the apex address when the site is on www", async () => {
+    const { seen, wrap } = calls();
+    const W = "https://www.example.com";
+    const { fetchPage } = site({ [`${W}/`]: page(`${W}/`, "<html>hi</html>"), "https://example.com/": page("https://example.com/", "x", { finalUrl: `${W}/` }) });
+    const { snapshot } = await collectSnapshot(new URL(`${W}/`), wrap(fetchPage));
+    expect(seen).toContain("https://example.com/");
+    expect(snapshot.probes?.alternateHost?.finalUrl).toBe(`${W}/`);
+  });
+
+  it("does not probe another spelling for a subdomain, which has none", async () => {
+    const { seen, wrap } = calls();
+    const S = "https://shop.example.com";
+    const { fetchPage } = site({ [`${S}/`]: page(`${S}/`, "<html>hi</html>") });
+    const { snapshot } = await collectSnapshot(new URL(`${S}/`), wrap(fetchPage));
+    expect(snapshot.probes?.alternateHost ?? null).toBeNull();
+    expect(seen.some((u) => u.includes("www.shop"))).toBe(false);
+  });
+
+  it("records nothing for a probe that cannot connect, and keeps going", async () => {
+    const { fetchPage } = site({ [`${O}/`]: home(), "http://example.com/": new Error("ECONNREFUSED"), "https://www.example.com/": new Error("ENOTFOUND") });
+    const { snapshot } = await collectSnapshot(new URL(`${O}/`), fetchPage);
+    expect(snapshot.probes?.http ?? null).toBeNull();
+    expect(snapshot.probes?.alternateHost ?? null).toBeNull();
+    expect(snapshot.home.status).toBe(200);
+  });
+
+  it("does not request the missing-page probe when robots.txt keeps crawlers out of it", async () => {
+    const { seen, wrap } = calls();
+    const { fetchPage } = site({
+      [`${O}/robots.txt`]: page(`${O}/robots.txt`, "User-agent: *\nDisallow: /siterecon-check", { contentType: "text/plain" }),
+      [`${O}/`]: home(),
+    });
+    const { snapshot } = await collectSnapshot(new URL(`${O}/`), wrap(fetchPage));
+    expect(seen).not.toContain(`${O}/siterecon-check-missing-page`);
+    expect(snapshot.probes?.notFound ?? null).toBeNull();
+  });
+
+  it("can be switched off, for the competitors that are only measured lightly", async () => {
+    const { seen, wrap } = calls();
+    const { fetchPage } = site({ [`${O}/`]: home() });
+    const { snapshot } = await collectSnapshot(new URL(`${O}/`), wrap(fetchPage), 0, { probes: false });
+    expect(seen.some((u) => u.startsWith("http://") || u.includes("www.") || u.includes("siterecon-check"))).toBe(false);
+    expect(snapshot.probes).toBeUndefined();
+  });
+});

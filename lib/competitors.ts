@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { collectSnapshot, type PageFetcher } from "@/lib/snapshot";
 import { runTechnicalChecks } from "@/lib/checks/technical";
 import { runGeoChecks } from "@/lib/checks/geo";
@@ -8,7 +7,7 @@ import { normalizeTargetUrl, registrableDomain } from "@/lib/url-guard";
 
 export { registrableDomain };
 import { wrapUntrusted } from "@/lib/injection";
-import { extractJson, type LlmClient } from "@/lib/llm/router";
+import { listFromReply, type LlmClient } from "@/lib/llm/router";
 import type { SearchFn } from "@/lib/search/tavily";
 import type { CompetitorRow, CompetitorTable, CouldntCheck, Platform } from "@/lib/pipeline/schemas";
 
@@ -20,6 +19,7 @@ import type { CompetitorRow, CompetitorTable, CouldntCheck, Platform } from "@/l
 const MAX_CANDIDATES = 6;
 const MAX_ROWS = 3;
 const GAP_POINTS = 10;
+const MAX_CHECK_GAPS = 4;
 
 /** Never a competitor: networks, search engines, marketplaces, directories and reference sites. */
 const NOT_COMPETITORS = [
@@ -37,6 +37,8 @@ export interface SiteProfile {
   technical: number | null;
   geo: number | null;
   platforms: Platform[];
+  /** The site's own failed SEO and AI-visibility checks, by finding id and title, to compare with rivals. */
+  failures?: { id: string; title: string }[];
 }
 
 export interface CompetitorDeps {
@@ -47,8 +49,6 @@ export interface CompetitorDeps {
   /** Asked before each competitor is fetched. False skips it. Used for the per-site rate limit. */
   allowDomain?: (domain: string) => boolean;
 }
-
-const AnswerSchema = z.object({ competitors: z.array(z.unknown()) });
 
 const SYSTEM = `You list direct competitors of a business so it can benchmark itself.
 Reply with only JSON: {"competitors":[{"domain":"example.com"}]} with at most ${MAX_CANDIDATES} real businesses that sell similar products or services to similar customers, each as a bare domain name.
@@ -73,7 +73,7 @@ function cleanDomain(raw: unknown, self: string): string | null {
 
 /** Plain-language gaps between the site and its competitors, worked out from the measured scores. */
 export function computeGaps(
-  site: { technical: number | null; geo: number | null; platforms: Platform[] },
+  site: { technical: number | null; geo: number | null; platforms: Platform[]; failures?: { id: string; title: string }[] },
   rows: CompetitorRow[],
 ): string[] {
   const gaps: string[] = [];
@@ -96,6 +96,17 @@ export function computeGaps(
     if (!site.platforms.includes(platform) && count >= threshold) {
       gaps.push(`${count} of ${rows.length} competitors are on ${platform}, which you do not link to.`);
     }
+  }
+  // Specific problems the site has and most of its rivals do not. Rivals with no check data are left out of the count.
+  const measured = rows.filter((r) => r.passed.length > 0);
+  if (measured.length > 0) {
+    const half = Math.ceil(measured.length / 2);
+    const specific = (site.failures ?? [])
+      .map((f) => ({ f, count: measured.filter((r) => r.passed.includes(f.id)).length }))
+      .filter((x) => x.count >= half)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, MAX_CHECK_GAPS);
+    for (const { f, count } of specific) gaps.push(`${count} of ${measured.length} competitors do not have this problem: ${f.title}.`);
   }
   return gaps.length > 0 ? gaps : ["No clear gaps against these competitors."];
 }
@@ -124,9 +135,8 @@ export async function findCompetitors(
         maxTokens: 500,
         signal: deps.signal,
       });
-      const parsed = AnswerSchema.safeParse(extractJson(reply.content));
-      if (!parsed.success) throw new Error("the AI returned an answer in an unexpected format");
-      for (const item of parsed.data.competitors.slice(0, 20)) add(item, "ai");
+      // The model may answer with one object per competitor, so the lists in every object are joined.
+      for (const item of listFromReply(reply.content, "competitors").slice(0, 20)) add(item, "ai");
     } catch (err) {
       if (deps.signal?.aborted) throw err;
       aiFailure = err instanceof Error ? err.message : "the AI request failed";
@@ -153,16 +163,23 @@ export async function findCompetitors(
     if (deps.allowDomain && !deps.allowDomain(candidate.domain)) continue; // this site has been fetched enough lately
     try {
       // Home page, robots.txt, sitemap and llms.txt only: respects robots.txt and keeps this cheap.
-      const { snapshot } = await collectSnapshot(new URL(`https://${candidate.domain}/`), deps.fetchPage, 0);
+      // No probes: a rival is measured lightly, and each extra request counts against its per-site budget.
+      const { snapshot } = await collectSnapshot(new URL(`https://${candidate.domain}/`), deps.fetchPage, 0, { probes: false });
       if (snapshot.domain === site.domain || rows.some((r) => r.domain === snapshot.domain)) continue;
       const profiles = extractSocialLinks(snapshot.home.body, snapshot.home.finalUrl).links.filter((l) => l.kind === "profile");
+      const technical = runTechnicalChecks(snapshot);
+      const geo = runGeoChecks(snapshot);
       rows.push({
         domain: snapshot.domain,
         url: snapshot.home.finalUrl,
         source: candidate.source,
-        technical: buildModuleResult("technical", runTechnicalChecks(snapshot)).score,
-        geo: buildModuleResult("geo", runGeoChecks(snapshot)).score,
+        technical: buildModuleResult("technical", technical).score,
+        geo: buildModuleResult("geo", geo).score,
         platforms: [...new Set(profiles.map((l) => l.platform))],
+        passed: [
+          ...technical.filter((o) => o.passed).map((o) => `technical:${o.id}`),
+          ...geo.filter((o) => o.passed).map((o) => `geo:${o.id}`),
+        ],
       });
     } catch {
       // unreachable, blocked, or not a web page: not a usable comparison

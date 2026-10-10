@@ -75,12 +75,19 @@ Done, test-first and covered by the eval (19 fixture sites, 66 seeded problems, 
 - **Speed earns partial credit** in Google's needs-improvement band, so a page at 85 no longer scores like a failure.
 - **The report opens with a grade and a plain-language verdict**, then a roadmap of every finding by effort (this week, this month, this quarter), then **ready-to-paste fixes** (canonical tag, robots.txt, sitemap.xml, Organization JSON-LD, llms.txt, Open Graph tags, security headers) built only from the site's own data. None of it is written by an AI.
 
-Not done yet, in the order I would do them:
+Added after that, in the same way (23 then 26 fixture sites, 74 seeded problems, 0 false positives):
 
-1. Content and E-E-A-T checks that need no AI: readability, author and about signals, trust pages, content depth by page type.
-2. Per-page results table, and passage-level citability scoring (the 134 to 167 word range).
-3. Deeper competitor comparison (run the same checks on each competitor, show a gap table) and richer social: Instagram through Meta's Business Discovery once a token exists.
-4. www/non-www and http to https redirect checks, hreflang, and a soft-404 probe. These need extra requests per scan.
+- **Content and E-E-A-T checks with no AI**: an About page, a privacy policy, 300 words of real copy, readability, and a copyright year that is not stale. The eval caught that LinkedIn company links were passing the About check, so it now counts only the site's own links.
+- **A table of every page read**: title, H1 count, word count and how many findings point at each page, also in the Markdown export.
+- **Competitor comparison by check**: it now says which problems most competitors do not have ("3 of 3 competitors do not have this problem: ...").
+- **Three probes** (only when they can be made, and not run on competitors): http:// redirecting to https://, the www and non-www spellings, and whether a page that does not exist returns 404.
+- **Parsing of model answers**: the model sometimes answers with one JSON object per item instead of a list. Reading only the first threw most ideas away without an error. All objects are now read, with a cap on reply size and restarts.
+
+Not done yet:
+
+1. Passage-level citability scoring (the 134 to 167 word range) and checks on inner pages' content (the content module reads the homepage only).
+2. hreflang and pagination checks, and author or byline signals for article pages.
+3. Anything that needs something only you can supply: the Instagram token working against the real API, GitHub Actions deploys for this repository, and live runs of Gemini, Tavily and MLflow.
 
 ### Social: what each platform gives
 

@@ -76,6 +76,12 @@ export function reportToMarkdown(report: Report): string {
   if (report.topFixes.length === 0) out.push("No issues found in the areas checked.", "");
   else report.topFixes.forEach((f, i) => out.push(findingBlock(f, i + 1)));
 
+  if (report.pageTable.length > 0) {
+    out.push("## Pages read", "", "| Page | Title | H1 | Words | Issues |", "|---|---|---|---|---|");
+    for (const p of report.pageTable) out.push(`| ${code(p.url)} | ${esc(p.title) || "(none)"} | ${p.h1} | ${p.words} | ${p.issues} |`);
+    out.push("");
+  }
+
   if (report.fixKit.length > 0) {
     out.push("## Ready-to-paste fixes", "", "Built from what your own site says. Check each one before you use it.", "");
     for (const item of report.fixKit) {

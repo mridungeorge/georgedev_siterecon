@@ -19,7 +19,7 @@ const REPORT: Report = {
   pagesScanned: ["https://acme.example/"], injectionFlags: 0,
   ideas: [{ title: "Add a title tag", why: "Search results need one.", findingId: "technical:title", effort: "low" }],
   social: { profiles: [{ platform: "github", url: "https://github.com/acme", handle: "acme", kind: "profile", status: "found" }], missing: ["facebook", "instagram", "linkedin"], mentions: { hackerNews: 3 }, readerUsed: true },
-  competitors: { rows: [{ domain: "rival.example", url: "https://rival.example/", source: "ai", technical: 90, geo: 60, platforms: ["facebook"] }], gaps: ["1 of 1 competitors score at least 10 points higher on SEO."], note: "Suggested by AI." },
+  competitors: { rows: [{ domain: "rival.example", url: "https://rival.example/", source: "ai", technical: 90, geo: 60, platforms: ["facebook"], passed: [] }], gaps: ["1 of 1 competitors score at least 10 points higher on SEO."], note: "Suggested by AI." },
   summary: {
     grade: "C", verdict: "Decent (C, 71/100). Strongest: SEO (80), weakest: Speed (40). 1 issue found, 1 of them a quick win.",
     strongest: { module: "technical", score: 80 }, weakest: { module: "performance", score: 40 },
@@ -30,6 +30,10 @@ const REPORT: Report = {
     id: "canonical", title: "Canonical tag", filename: "the <head> of the homepage", language: "html",
     content: '<link rel="canonical" href="https://acme.example/">', note: "Tells search engines which address is the main one.", forFindings: ["technical:title"],
   }],
+  pageTable: [
+    { url: "https://acme.example/", title: "Acme", description: "Shelving for small homes.", h1: 1, words: 312, issues: 2 },
+    { url: "https://acme.example/about", title: "", description: "", h1: 0, words: 40, issues: 3 },
+  ],
 };
 
 describe("reportToMarkdown", () => {
@@ -129,5 +133,27 @@ describe("reportToMarkdown summary, roadmap and fix kit", () => {
     expect(bare).not.toContain("## Summary");
     expect(bare).not.toContain("## Roadmap");
     expect(bare).not.toContain("## Ready-to-paste fixes");
+  });
+});
+
+describe("reportToMarkdown pages table", () => {
+  it("lists each page read with its title, headings, length and issues", () => {
+    const md = reportToMarkdown(REPORT);
+    expect(md).toContain("## Pages read");
+    expect(md).toContain("| Page | Title | H1 | Words | Issues |");
+    expect(md).toMatch(/\| `https:\/\/acme\.example\/` \| Acme \| 1 \| 312 \| 2 \|/);
+    expect(md).toMatch(/\| `https:\/\/acme\.example\/about` \| \(none\) \| 0 \| 40 \| 3 \|/);
+  });
+  it("keeps a row on one line however hostile the title is", () => {
+    const hostile = { ...REPORT, pageTable: [{ ...REPORT.pageTable[0], title: "a | b\n<script>x</script> [y](javascript:z)" }] };
+    const out = reportToMarkdown(hostile);
+    const row = out.split("\n").find((l) => l.startsWith("| `https://acme.example/`"))!;
+    expect(row).toBeDefined();
+    expect(row).not.toMatch(/<script/i);
+    expect(row).not.toMatch(/\]\(javascript:/i);
+    expect(row.match(/(?<!\\)\|/g)!.length).toBe(6); // 5 columns, 6 unescaped separators
+  });
+  it("is left out when no pages were recorded", () => {
+    expect(reportToMarkdown({ ...REPORT, pageTable: [] })).not.toContain("## Pages read");
   });
 });

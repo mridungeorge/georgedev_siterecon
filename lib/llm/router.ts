@@ -132,3 +132,79 @@ export function extractJson<T = unknown>(content: string): T {
   }
   throw new Error("the AI response contained incomplete JSON");
 }
+
+const MAX_REPLY_CHARS = 20_000;
+const MAX_RESTARTS = 20;
+
+/** The index of the bracket that closes the one at `start`, ignoring brackets inside strings, or -1. */
+function closingIndex(raw: string, start: number): number {
+  const opener = raw[start];
+  const closer = opener === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < raw.length; i++) {
+    const ch = raw[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === opener) depth++;
+    else if (ch === closer && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Every top-level JSON value in a model reply, in order. Models sometimes answer {"ideas":[a]}
+ * {"ideas":[b]} one object per item instead of one object holding the list, and reading only the first
+ * throws the rest away without an error. A fragment that does not parse is skipped, and the work spent
+ * on hostile input (thousands of unclosed brackets) is bounded by a cap on the reply size and on restarts.
+ */
+export function extractAllJson(content: string, max = 50): unknown[] {
+  const raw = content.slice(0, MAX_REPLY_CHARS).replace(/```(?:json)?/gi, " ");
+  const values: unknown[] = [];
+  const opener = /[[{]/g;
+  let restarts = 0;
+  let sawOpener = false;
+  let pos = 0;
+  while (values.length < max) {
+    opener.lastIndex = pos;
+    const m = opener.exec(raw);
+    if (!m) break;
+    sawOpener = true;
+    const end = closingIndex(raw, m.index);
+    if (end !== -1) {
+      try {
+        values.push(JSON.parse(raw.slice(m.index, end + 1)));
+        pos = end + 1;
+        continue;
+      } catch {
+        // balanced but not valid JSON: fall through and look inside it
+      }
+    }
+    if (++restarts > MAX_RESTARTS) break;
+    pos = m.index + 1;
+  }
+  if (values.length === 0) throw new Error(sawOpener ? "the AI response contained incomplete JSON" : "no JSON found in the AI response");
+  return values;
+}
+
+/** The lists found under `key` in every object of `values`, joined in order. */
+export function mergeLists(values: unknown[], key: string): unknown[] {
+  return values.flatMap((v) => {
+    const list = typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>)[key] : undefined;
+    return Array.isArray(list) ? list : [];
+  });
+}
+
+/** The list under `key` from a reply that may hold one object or several. Throws when no object has one. */
+export function listFromReply(content: string, key: string): unknown[] {
+  const values = extractAllJson(content);
+  const has = values.some((v) => typeof v === "object" && v !== null && !Array.isArray(v) && Array.isArray((v as Record<string, unknown>)[key]));
+  if (!has) throw new Error("the AI returned an answer in an unexpected format");
+  return mergeLists(values, key);
+}

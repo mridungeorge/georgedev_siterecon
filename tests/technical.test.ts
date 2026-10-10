@@ -340,3 +340,54 @@ describe("multi-page checks (only when inner pages were read)", () => {
     expect(always(runTechnicalChecks(goodSnap()))).toBe(100);
   });
 });
+
+describe("probe checks (only when the probe could be made)", () => {
+  const run = (probes?: NonNullable<ReturnType<typeof goodSnap>["probes"]>) => {
+    const s = goodSnap();
+    if (probes) s.probes = probes;
+    return runTechnicalChecks(s);
+  };
+  const ids = (outcomes: ReturnType<typeof runTechnicalChecks>) => outcomes.map((o) => o.id);
+
+  it("scores none of them when probing was off or every probe failed", () => {
+    for (const out of [run(), run({ http: null, alternateHost: null, notFound: null })]) {
+      for (const id of ["https-redirect", "host-redirect", "soft-404"]) expect(ids(out)).not.toContain(id);
+    }
+  });
+
+  describe("https-redirect", () => {
+    it("passes when http:// ends up on https", () => {
+      expect(failed(run({ http: { finalUrl: "https://example.com/", status: 200 } }))).not.toContain("https-redirect");
+    });
+    it("flags an http:// address that stays on http, naming it", () => {
+      const outcomes = run({ http: { finalUrl: "http://example.com/", status: 200 } });
+      expect(failed(outcomes)).toContain("https-redirect");
+      expect(finding(outcomes, "https-redirect").evidence[0].note).toMatch(/http:\/\/example\.com\//);
+    });
+  });
+
+  describe("host-redirect", () => {
+    it("passes when the other spelling redirects to the main address", () => {
+      expect(failed(run({ alternateHost: { url: "https://www.example.com/", finalUrl: "https://example.com/", status: 200 } }))).not.toContain("host-redirect");
+    });
+    it("flags both spellings serving the site, which splits its ranking between two addresses", () => {
+      const outcomes = run({ alternateHost: { url: "https://www.example.com/", finalUrl: "https://www.example.com/", status: 200 } });
+      expect(failed(outcomes)).toContain("host-redirect");
+      expect(finding(outcomes, "host-redirect").title).toMatch(/www/);
+    });
+  });
+
+  describe("soft-404", () => {
+    it.each([404, 410])("passes when a missing page returns %i", (status) => {
+      expect(failed(run({ notFound: { status } }))).not.toContain("soft-404");
+    });
+    it("flags a missing page that returns 200, which fills search results with empty pages", () => {
+      const outcomes = run({ notFound: { status: 200 } });
+      expect(failed(outcomes)).toContain("soft-404");
+      expect(finding(outcomes, "soft-404").severity).toBe("medium");
+    });
+    it.each([401, 403, 429, 500, 503])("does not judge a site that answers %i, because that says nothing about its 404 page", (status) => {
+      expect(ids(run({ notFound: { status } }))).not.toContain("soft-404");
+    });
+  });
+});

@@ -1,7 +1,7 @@
 {
-  "fixtures": 23,
-  "expectedFindings": 71,
-  "foundExpected": 71,
+  "fixtures": 26,
+  "expectedFindings": 74,
+  "foundExpected": 74,
   "recall": 1,
   "falsePositives": 0,
   "evidenceValid": true,

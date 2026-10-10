@@ -11,6 +11,10 @@ export interface FixtureFile {
 }
 export interface Fixture {
   files: Record<string, FixtureFile>;
+  /** http:// stays on http:// instead of redirecting to https://. */
+  noHttpRedirect?: boolean;
+  /** The www spelling of the host also serves the site, instead of not existing. */
+  wwwServes?: boolean;
 }
 
 const page = (body: string, headers: Record<string, string> = {}): FixtureFile => ({ body, contentType: "text/html; charset=utf-8", headers });
@@ -84,10 +88,15 @@ const INNER_PAGES: Record<string, FixtureFile> = {
  */
 const healthy = (
   name: string,
-  over: { html?: string; robots?: string; sitemap?: string; headers?: Record<string, string>; files?: Record<string, FixtureFile> } = {},
+  over: {
+    html?: string; robots?: string; sitemap?: string; headers?: Record<string, string>; files?: Record<string, FixtureFile>;
+    noHttpRedirect?: boolean; wwwServes?: boolean;
+  } = {},
 ): Fixture => {
   const own = (s: string) => s.split("healthy-bakery.test").join(`${name}.test`);
   return {
+    ...(over.noHttpRedirect ? { noHttpRedirect: true } : {}),
+    ...(over.wwwServes ? { wwwServes: true } : {}),
     files: {
       "/": page(own(over.html ?? HEALTHY_HTML), over.headers ?? { ...HSTS, ...FRESH, ...SECURITY }),
       "/robots.txt": text(own(over.robots ?? ROBOTS_OPEN)),
@@ -142,6 +151,12 @@ export const FIXTURES: Record<string, Fixture> = {
     sitemap: `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://elsewhere.test/page</loc></url><url><loc>https://elsewhere.test/page</loc></url><url><loc>https://healthy-bakery.test/menu</loc></url></urlset>`,
   }),
   "robots-no-sitemap": healthy("robots-no-sitemap", { robots: "User-agent: *\nAllow: /\n" }),
+
+  // ---- How the site answers requests it should redirect or reject: one problem each ----
+  "no-https-redirect": healthy("no-https-redirect", { noHttpRedirect: true }),
+  "www-duplicate": healthy("www-duplicate", { wwwServes: true }),
+  // A page that does not exist answers 200 with the homepage's content.
+  "soft-404": healthy("soft-404", { files: { "/siterecon-check-missing-page": page(HEALTHY_HTML, { ...HSTS, ...FRESH, ...SECURITY }) } }),
 
   // ---- Trust, depth and readability: one problem each ----
   // No About link and no privacy policy link. The menu keeps three links so navigation still passes.

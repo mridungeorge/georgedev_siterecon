@@ -16,6 +16,7 @@ import { buildModuleResult, failedModule, overallScore, topFixes } from "@/lib/s
 import { buildFixPrompt } from "@/lib/fix-prompt";
 import { buildSummary } from "@/lib/summary";
 import { buildFixKit } from "@/lib/fix-kit";
+import { buildPageTable } from "@/lib/page-table";
 import type { CheckOutcome, CouldntCheck, ModuleResult, Report } from "./schemas";
 import { type StepName } from "./steps";
 
@@ -215,6 +216,8 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
         technical: scoreOf("technical"),
         geo: scoreOf("geo"),
         platforms: [...new Set((social?.profiles ?? []).filter((p) => p.kind === "profile").map((p) => p.platform))],
+        // What the site fails in the two modules competitors are measured on, to compare check by check.
+        failures: modules.filter((m) => m.module === "technical" || m.module === "geo").flatMap((m) => m.findings.map((f) => ({ id: f.id, title: f.title }))),
       },
       {
         llm,
@@ -271,6 +274,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
     competitors,
     summary: buildSummary(modules, overall),
     fixKit: buildFixKit(snapshot, modules, social),
+    pageTable: buildPageTable(snapshot, modules),
   };
   emit({
     event: "step-done",

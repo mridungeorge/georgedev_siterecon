@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { USER_AGENT, type SafeResponse } from "./safe-fetch";
 import { isAllowed, parseRobots, type RobotsRules } from "./robots";
-import { targetDomain } from "./url-guard";
+import { registrableDomain, targetDomain } from "./url-guard";
 import type { CouldntCheck } from "./pipeline/schemas";
 
 export type PageFetcher = (url: string, signal?: AbortSignal) => Promise<SafeResponse>;
@@ -19,9 +19,24 @@ export interface SiteSnapshot {
   fetchedAt: string;
   /** Internal links that were followed and led to an error page. */
   brokenLinks?: { url: string; status: number }[];
+  /** How the site answers requests it should redirect or reject. Missing when probing was switched off. */
+  probes?: SiteProbes;
   /** What a real browser saw, when the optional render step ran. */
   rendered?: { words: number; mobileOverflow: boolean };
 }
+
+/** Three small requests that show how well a site is set up. Each is null when it could not be made. */
+export interface SiteProbes {
+  /** Where the plain http:// address ends up. */
+  http?: { finalUrl: string; status: number } | null;
+  /** Where the other spelling (www or not) ends up. */
+  alternateHost?: { url: string; finalUrl: string; status: number } | null;
+  /** What a page that does not exist returns. */
+  notFound?: { status: number } | null;
+}
+
+/** The path asked for to see how a site answers a page that does not exist. */
+export const MISSING_PAGE_PATH = "/siterecon-check-missing-page";
 
 export class TargetUnreachableError extends Error {}
 export class NotHtmlError extends Error {}
@@ -78,7 +93,9 @@ export async function collectSnapshot(
   target: URL,
   fetchPage: PageFetcher,
   maxPages = MAX_INNER_PAGES,
+  opts: { probes?: boolean } = {},
 ): Promise<{ snapshot: SiteSnapshot; couldntCheck: CouldntCheck[] }> {
+  const { probes: runProbes = true } = opts;
   const couldntCheck: CouldntCheck[] = [];
   const blocked = (host: string) =>
     new BlockedByRobotsError(`${host} asks crawlers not to visit this page (robots.txt), so SiteRecon did not scan it.`);
@@ -130,6 +147,28 @@ export async function collectSnapshot(
 
   const llmsTxt = await fetchText(`${origin}/llms.txt`, fetchPage);
 
+  let probes: SiteProbes | undefined;
+  if (runProbes) {
+    const probe = async <T>(url: string, pick: (r: SafeResponse) => T): Promise<T | null> => {
+      try {
+        return pick(await fetchPage(url));
+      } catch {
+        return null; // it could not be made, which says nothing about the site
+      }
+    };
+    const host = finalUrl.hostname;
+    const registrable = registrableDomain(host);
+    // The other spelling only exists for the bare domain and its www form, not for a subdomain such as shop.example.com.
+    const alternate = host === registrable ? `www.${host}` : host === `www.${registrable}` ? registrable : null;
+    const missing = `${origin}${MISSING_PAGE_PATH}`;
+    const [http, alternateHost, notFound] = await Promise.all([
+      finalUrl.protocol === "https:" ? probe(`http://${finalUrl.host}/`, (r) => ({ finalUrl: r.finalUrl, status: r.status })) : Promise.resolve(null),
+      alternate ? probe(`https://${alternate}/`, (r) => ({ url: `https://${alternate}/`, finalUrl: r.finalUrl, status: r.status })) : Promise.resolve(null),
+      isAllowed(robots.rules, USER_AGENT, MISSING_PAGE_PATH) ? probe(missing, (r) => ({ status: r.status })) : Promise.resolve(null),
+    ]);
+    probes = { http, alternateHost, notFound };
+  }
+
   // Pick the pages to read first (robots.txt decides), then fetch them a few at a time. Results are
   // handled in link order so the same site always gives the same report.
   const candidates: string[] = [];
@@ -180,6 +219,7 @@ export async function collectSnapshot(
       llmsTxt,
       fetchedAt: new Date().toISOString(),
       brokenLinks,
+      ...(probes ? { probes } : {}),
     },
     couldntCheck,
   };

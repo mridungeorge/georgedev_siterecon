@@ -1,12 +1,11 @@
 import { z } from "zod";
 import { EffortSchema, type CouldntCheck, type Finding, type Idea } from "@/lib/pipeline/schemas";
 import { wrapUntrusted } from "@/lib/injection";
-import { extractJson, type LlmClient } from "@/lib/llm/router";
+import { listFromReply, type LlmClient } from "@/lib/llm/router";
 import { clip } from "@/lib/checks/helpers";
 
 export const MAX_IDEAS = 8;
 
-const AnswerSchema = z.object({ ideas: z.array(z.unknown()) });
 const IdeaItemSchema = z.object({
   title: z.string().min(3),
   why: z.string().catch(""),
@@ -53,9 +52,8 @@ export async function generateIdeas(
       maxTokens: 1200,
       signal,
     });
-    const parsed = AnswerSchema.safeParse(extractJson(reply.content));
-    if (!parsed.success) throw new Error("the AI returned an answer in an unexpected format");
-    raw = parsed.data.ideas;
+    // The model may answer with one object per idea, so the lists in every object are joined.
+    raw = listFromReply(reply.content, "ideas");
   } catch (err) {
     return unavailable(err instanceof Error ? err.message : "the AI request failed");
   }

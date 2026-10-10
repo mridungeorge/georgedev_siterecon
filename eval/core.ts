@@ -28,12 +28,18 @@ const CHECKED = new Set(["technical", "geo", "content", "social"]);
 export function fixtureFetcher(fixture: Fixture, name: string): PageFetcher {
   return async (url): Promise<SafeResponse> => {
     const u = new URL(url);
-    const file = u.hostname === `${name}.test` ? fixture.files[u.pathname] : undefined;
+    const isBare = u.hostname === `${name}.test`;
+    const isWww = u.hostname === `www.${name}.test`;
+    // The other spelling does not exist unless the fixture says it serves the site too.
+    if (isWww && !fixture.wwwServes) throw new Error(`getaddrinfo ENOTFOUND ${u.hostname}`);
+    const file = isBare || isWww ? fixture.files[u.pathname] : undefined;
     if (!file) {
       return { url, finalUrl: url, status: 404, headers: {}, contentType: "text/html", body: "not found", truncated: false };
     }
+    // Plain http:// redirects to https:// unless the fixture says the site does not do that.
+    const finalUrl = u.protocol === "http:" && !fixture.noHttpRedirect ? url.replace(/^http:/, "https:") : url;
     const contentType = file.contentType ?? "text/html";
-    return { url, finalUrl: url, status: file.status ?? 200, headers: { ...file.headers, "content-type": contentType }, contentType, body: file.body, truncated: false };
+    return { url, finalUrl, status: file.status ?? 200, headers: { ...file.headers, "content-type": contentType }, contentType, body: file.body, truncated: false };
   };
 }
 

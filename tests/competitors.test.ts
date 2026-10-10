@@ -35,6 +35,14 @@ describe("findCompetitors", () => {
     expect(r.table!.note).toMatch(/suggested by AI/i);
   });
 
+  it("keeps which checks each competitor passes, so the report can name what they do better", async () => {
+    const fetchPage = site({ "rival.example": GOOD_HOME() });
+    const r = await findCompetitors(SELF, { llm: ai([{ domain: "rival.example" }]), search: null, fetchPage });
+    const passed = r.table!.rows[0].passed;
+    expect(passed).toEqual(expect.arrayContaining(["technical:title", "technical:canonical", "geo:organisation-schema"]));
+    expect(passed.every((id) => /^(technical|geo):[a-z0-9-]+$/.test(id))).toBe(true);
+  });
+
   it("stops after three audited competitors", async () => {
     const hosts = Object.fromEntries(["a", "b", "c", "d", "e"].map((x) => [`${x}.example`, GOOD_HOME()]));
     const r = await findCompetitors(SELF, { llm: ai(Object.keys(hosts).map((domain) => ({ domain }))), search: null, fetchPage: site(hosts) });
@@ -93,7 +101,7 @@ describe("findCompetitors", () => {
 
 describe("computeGaps", () => {
   const row = (domain: string, technical: number, geo: number, platforms: ("facebook" | "instagram" | "linkedin")[]) =>
-    ({ domain, url: `https://${domain}/`, source: "ai" as const, technical, geo, platforms });
+    ({ domain, url: `https://${domain}/`, source: "ai" as const, technical, geo, platforms, passed: [] as string[] });
 
   it("reports score gaps of 10 points or more and platforms most competitors have", () => {
     const gaps = computeGaps({ technical: 50, geo: 40, platforms: ["facebook"] }, [row("a.example", 70, 45, ["facebook", "instagram"]), row("b.example", 55, 60, ["instagram"])]);
@@ -105,6 +113,41 @@ describe("computeGaps", () => {
   it("says there are no clear gaps when the site holds its own", () => {
     expect(computeGaps({ technical: 90, geo: 90, platforms: ["facebook"] }, [row("a.example", 60, 60, ["facebook"])])).toEqual(["No clear gaps against these competitors."]);
   });
+  describe("problems most competitors do not have", () => {
+    const failures = [
+      { id: "technical:canonical", title: "The homepage has no canonical link" },
+      { id: "geo:llms-txt", title: "The site has no llms.txt file" },
+    ];
+    const mine = { technical: 50, geo: 50, platforms: [] as never[], failures };
+    const withPassed = (domain: string, passed: string[]) => ({ ...row(domain, 50, 50, []), passed });
+
+    it("names each problem that at least half of the competitors do not have, most common first", () => {
+      const gaps = computeGaps(mine, [
+        withPassed("a.example", ["technical:canonical", "geo:llms-txt"]),
+        withPassed("b.example", ["technical:canonical", "geo:llms-txt"]),
+        withPassed("c.example", ["technical:canonical"]),
+      ]);
+      expect(gaps[0]).toBe("3 of 3 competitors do not have this problem: The homepage has no canonical link.");
+      expect(gaps[1]).toBe("2 of 3 competitors do not have this problem: The site has no llms.txt file.");
+    });
+    it("leaves out a problem that fewer than half of them avoid", () => {
+      const gaps = computeGaps(mine, [withPassed("a.example", ["geo:llms-txt"]), withPassed("b.example", []), withPassed("c.example", ["technical:canonical"]), withPassed("d.example", [])].map((r, i) => (i === 1 || i === 3 ? { ...r, passed: ["technical:title"] } : r)));
+      expect(gaps.join(" ")).not.toMatch(/llms\.txt/);
+    });
+    it("does not count competitors that have no check data", () => {
+      const gaps = computeGaps(mine, [withPassed("a.example", ["technical:canonical"]), withPassed("b.example", [])]);
+      expect(gaps[0]).toBe("1 of 1 competitors do not have this problem: The homepage has no canonical link.");
+    });
+    it("says nothing about problems the site does not have, and still falls back to no clear gaps", () => {
+      expect(computeGaps({ ...mine, failures: [] }, [withPassed("a.example", ["technical:canonical"])])).toEqual(["No clear gaps against these competitors."]);
+    });
+    it("shows at most four such lines", () => {
+      const many = Array.from({ length: 8 }, (_, i) => ({ id: `technical:c${i}`, title: `Problem ${i}` }));
+      const gaps = computeGaps({ ...mine, failures: many }, [withPassed("a.example", many.map((m) => m.id))]);
+      expect(gaps.filter((g) => /do not have this problem/.test(g))).toHaveLength(4);
+    });
+  });
+
   it("ignores competitors with no score for a metric", () => {
     const gaps = computeGaps({ technical: 50, geo: 50, platforms: [] }, [{ ...row("a.example", 0, 0, []), technical: null, geo: null }]);
     expect(gaps).toEqual(["No clear gaps against these competitors."]);
