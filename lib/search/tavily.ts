@@ -29,7 +29,11 @@ export function createTavilySearch(opts: TavilyOptions): SearchFn {
         body: JSON.stringify({ query, max_results: 8, search_depth: "basic" }),
         signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
       });
-      if (!res.ok) return [];
+      if (!res.ok) {
+        // For the person running the server: a refused key would otherwise look exactly like "no results".
+        console.warn(`[siterecon] Tavily search was refused (HTTP ${res.status}). Check TAVILY_API_KEY and the plan's monthly credits.`);
+        return [];
+      }
       const body = (await res.json()) as { results?: { url?: unknown }[] };
       return (body.results ?? []).map((r) => r.url).filter((u): u is string => typeof u === "string");
     } catch {
