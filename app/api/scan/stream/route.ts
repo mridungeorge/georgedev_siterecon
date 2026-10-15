@@ -8,6 +8,8 @@ import { createFetchClient } from "@/lib/fetch-client";
 import { createInstagramReader } from "@/lib/social/instagram";
 import { createTavilySearch } from "@/lib/search/tavily";
 import { countHackerNewsMentions } from "@/lib/mentions";
+import { fetchJsonWithBackoff } from "@/lib/retry";
+import { readAuthoritySignals } from "@/lib/authority";
 import { logScanRun } from "@/lib/observability/mlflow";
 import type { PageSpeedDeps } from "@/lib/checks/performance";
 
@@ -25,12 +27,8 @@ export function GET(req: Request) {
   const pagespeed: PageSpeedDeps = {
     apiKey: process.env.PAGESPEED_API_KEY,
     quotaOk: () => tryConsumeQuota(db, "pagespeed"),
-    fetchJson: async (url, signal) => {
-      const timeout = AbortSignal.timeout(60_000);
-      const res = await fetch(url, { signal: signal ? AbortSignal.any([timeout, signal]) : timeout });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return res.json();
-    },
+    // PageSpeed answers 429 and 5xx when busy, so one retry with a short wait is worth the few seconds.
+    fetchJson: (url, signal) => fetchJsonWithBackoff(url, { timeoutMs: 60_000, signal, retries: 1, baseMs: 800, maxMs: 4_000 }),
   };
   const fetchClient = process.env.FETCH_SERVICE_URL && process.env.FETCH_SERVICE_SECRET
     ? createFetchClient({ baseUrl: process.env.FETCH_SERVICE_URL, secret: process.env.FETCH_SERVICE_SECRET })
@@ -59,6 +57,11 @@ export function GET(req: Request) {
     instagram,
     search: createTavilySearch({ apiKey: process.env.TAVILY_API_KEY, db }),
     mentions: (domain, signal) => countHackerNewsMentions(domain, fetch, signal),
+    // Open PageRank (needs a free key) and Wikidata (no key), behind a daily guard of their own.
+    authority: async (input) =>
+      tryConsumeQuota(db, "authority")
+        ? readAuthoritySignals({ ...input, apiKey: process.env.OPENPAGERANK_API_KEY })
+        : { domainRank: null, wikidata: null, hackerNews: input.hackerNews },
     logRun: process.env.MLFLOW_URL ? (report, ms) => logScanRun({ baseUrl: process.env.MLFLOW_URL as string }, report, ms) : null,
   });
 }

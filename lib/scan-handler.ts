@@ -5,7 +5,7 @@ import { commitRateLimit, getClientIp, peekRateLimit, refundRateLimit, tryConsum
 import { getCachedReport, purgeExpiredReports, saveReport } from "./report-store";
 import { BlockedByRobotsError, NotHtmlError, TargetUnreachableError, type PageFetcher } from "./snapshot";
 import { BlockedAddressError } from "./safe-fetch";
-import { runScan } from "./pipeline/run";
+import { runScan, type RunDeps } from "./pipeline/run";
 import type { ScanQueue } from "./scan-queue";
 import type { LlmClient } from "./llm/router";
 import type { PageSpeedDeps } from "./checks/performance";
@@ -26,6 +26,7 @@ export interface ScanDeps {
   instagram?: ProfileReader | null;
   search?: SearchFn | null;
   mentions?: ((domain: string, signal?: AbortSignal) => Promise<number | null>) | null;
+  authority?: RunDeps["authority"];
   /** Called once per finished scan, e.g. to log it to MLflow. A failure here never affects the scan. */
   logRun?: ((report: Report, durationMs: number) => Promise<unknown>) | null;
   now?: () => number;
@@ -144,7 +145,7 @@ export async function handleScan(req: Request, deps: ScanDeps): Promise<Response
             reject(new Error("The scan took too long and was stopped."));
           }, deps.scanTimeoutMs ?? SCAN_TIMEOUT_MS);
         });
-        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, fetchClient: deps.fetchClient, instagram: deps.instagram, search: deps.search, mentions: deps.mentions, allowCompetitorDomain: (d) => tryConsumeCompetitorFetch(deps.db, d, now()), signal: abort.signal });
+        scan = runScan(target, { fetchPage, emit: (e) => send(sse(e.event, e.data)), llm: deps.llm, pagespeed: deps.pagespeed, fetchClient: deps.fetchClient, instagram: deps.instagram, search: deps.search, mentions: deps.mentions, authority: deps.authority, allowCompetitorDomain: (d) => tryConsumeCompetitorFetch(deps.db, d, now()), signal: abort.signal });
         const report = await Promise.race([scan, timeout]);
         saveReport(deps.db, report);
         if (deps.logRun) void Promise.resolve().then(() => deps.logRun!(report, Date.now() - startedAt)).catch(() => {});

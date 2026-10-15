@@ -13,7 +13,7 @@ visitor ──HTTPS──▶ Caddy ──▶ siterecon-web (Next.js, systemd)  �
 
 ## The scan pipeline (`lib/pipeline/run.ts`)
 
-`fetch` → `render` → `technical` → `geo` → `content` → `performance` → `social` → `competitors` → `synthesis`, streamed as server-sent events (`step-start`, `step-done`, `step-warn`, `report`, `error`).
+`fetch` → `render` → `technical` → `geo` → `crawl` → `citation` → `content` → `marketing` → `performance` → `social` → `competitors` → `synthesis`, streamed as server-sent events (`step-start`, `step-done`, `step-warn`, `report`, `error`).
 
 Only `fetch` can fail a scan: with nothing to read there is nothing to audit. Every later step is isolated, so a failure becomes a "couldn't check" entry and the rest of the report still arrives. Steps that call outside services get a time budget each, and every one checks for cancellation before it starts.
 

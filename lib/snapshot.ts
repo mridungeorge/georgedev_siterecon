@@ -3,6 +3,26 @@ import { USER_AGENT, type SafeResponse } from "./safe-fetch";
 import { isAllowed, parseRobots, type RobotsRules } from "./robots";
 import { registrableDomain, targetDomain } from "./url-guard";
 import type { CouldntCheck } from "./pipeline/schemas";
+import type { SitemapCrawl } from "./site-crawl";
+
+/** What the browser counted on the page after JavaScript ran. Numbers only: no text leaves the browser. */
+export interface RenderedStructure {
+  h1?: number;
+  /** Links to the same site. */
+  links?: number;
+  jsonLd?: number;
+  titleChars?: number;
+  /** Largest contentful paint, in ms. Missing or 0 means the browser did not report one. */
+  lcpMs?: number;
+  /** Cumulative layout shift, times 1000. */
+  clsMilli?: number;
+  /** Interaction to next paint from one synthetic key press and click, in ms. 0 means no interaction was recorded. */
+  inpMs?: number;
+  /** Console messages that mention a hydration mismatch. Counted, never kept. */
+  hydrationErrors?: number;
+  /** The kind of element the largest paint was, from a fixed list. */
+  lcpTag?: string;
+}
 
 export type PageFetcher = (url: string, signal?: AbortSignal) => Promise<SafeResponse>;
 
@@ -21,8 +41,10 @@ export interface SiteSnapshot {
   brokenLinks?: { url: string; status: number }[];
   /** How the site answers requests it should redirect or reject. Missing when probing was switched off. */
   probes?: SiteProbes;
+  /** Pages the sitemap lists that the main crawl did not read, fetched by the bounded sitemap crawl. */
+  siteCrawl?: SitemapCrawl;
   /** What a real browser saw, when the optional render step ran. */
-  rendered?: { words: number; mobileOverflow: boolean };
+  rendered?: { words: number; mobileOverflow: boolean } & RenderedStructure;
 }
 
 /** Three small requests that show how well a site is set up. Each is null when it could not be made. */

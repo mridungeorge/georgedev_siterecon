@@ -7,6 +7,40 @@ def render(client, url="https://acme.example/"):
     return client.post("/render", json={"url": url}, headers=AUTH)
 
 
+def test_a_timeout_is_reported_as_one_and_not_as_a_generic_failure():
+    from app.render import RenderError
+
+    def too_slow(url):
+        raise RenderError("the browser took too long and was stopped", detail="timed out after 60 s")
+
+    r = render(make_client(renderer=too_slow))
+    assert r.json() == {"status": "skipped", "reason": "the page took too long to load in the browser, so it was stopped"}
+
+
+def test_an_unexpected_error_still_gets_the_generic_reason_and_no_internals():
+    def broken(url):
+        raise RuntimeError("C:\\secret\\path exploded")
+
+    r = render(make_client(renderer=broken))
+    assert r.json() == {"status": "skipped", "reason": "the browser could not render the page"}
+
+
+def test_vitals_are_returned_when_the_renderer_measured_them():
+    measured = {"words": 9, "mobileOverflow": False, "lcpMs": 1800, "clsMilli": 40, "inpMs": 90, "hydrationErrors": 0, "lcpTag": "h1"}
+    r = render(make_client(renderer=lambda url: measured))
+    assert r.json() == {"status": "ok", **measured}
+
+
+def test_an_unknown_lcp_tag_is_dropped_by_the_service():
+    r = render(make_client(renderer=lambda url: {"words": 9, "mobileOverflow": False, "lcpTag": "<b>x</b>"}))
+    assert r.json() == {"status": "ok", "words": 9, "mobileOverflow": False}
+
+
+def test_structure_counts_are_returned_when_the_renderer_measured_them():
+    r = render(make_client(renderer=lambda url: {"words": 9, "mobileOverflow": False, "h1": 1, "links": 4, "jsonLd": 0, "titleChars": 12}))
+    assert r.json() == {"status": "ok", "words": 9, "mobileOverflow": False, "h1": 1, "links": 4, "jsonLd": 0, "titleChars": 12}
+
+
 def test_returns_what_the_browser_measured():
     r = render(make_client(renderer=lambda url: {"words": 412, "mobileOverflow": True}))
     assert r.status_code == 200

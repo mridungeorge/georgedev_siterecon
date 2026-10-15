@@ -51,7 +51,7 @@ const MIN_QUOTE_WORDS = 3;
 const NUMBER_WORD = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
 
 export interface AiReviewInput {
-  module: "content" | "marketing";
+  module: "content" | "marketing" | "citation";
   rubric: readonly AiRubricItem[];
   /** Points each question is worth. */
   weight: number;
@@ -135,7 +135,7 @@ ${rubric.map((r) => `- ${r.id}: ${r.question}`).join("\n")}`;
       continue;
     }
     if (answer.passed) {
-      outcomes.push({ id: item.id, weight, passed: true });
+      outcomes.push({ id: item.id, weight, passed: true, quote: clip(answer.quote, 200) });
       continue;
     }
     outcomes.push({

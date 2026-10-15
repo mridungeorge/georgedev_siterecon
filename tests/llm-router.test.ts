@@ -40,10 +40,33 @@ describe("createLlmClient", () => {
   it("falls over to Gemini when NIM errors or is rate limited", async () => {
     for (const status of [429, 500]) {
       const f = fakeFetch({ nim: { status }, gemini: { status: 200, content: "from gemini" } });
-      const res = await createLlmClient({ db: openDb(":memory:"), env: both, fetch: f.impl })(ask);
+      const res = await createLlmClient({ db: openDb(":memory:"), env: both, fetch: f.impl, retry: { sleep: async () => {}, jitter: () => 1 } })(ask);
       expect(res.provider).toBe("gemini");
-      expect(f.calls.map((c) => c.url.includes("nvidia"))).toEqual([true, false]);
+      // NIM is tried, retried once after a short wait, and only then does Gemini answer.
+      expect(f.calls.map((c) => c.url.includes("nvidia"))).toEqual([true, true, false]);
     }
+  });
+
+  it("retries a busy provider once and keeps using it when the retry works", async () => {
+    let nimCalls = 0;
+    const impl = (async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes("nvidia")) {
+        nimCalls += 1;
+        if (nimCalls === 1) return new Response("busy", { status: 503 });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: "from nim" } }] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const res = await createLlmClient({ db: openDb(":memory:"), env: both, fetch: impl, retry: { sleep: async () => {}, jitter: () => 1 } })(ask);
+    expect(res).toMatchObject({ content: "from nim", provider: "nim" });
+    expect(nimCalls).toBe(2);
+  });
+
+  it("does not retry a refused key", async () => {
+    const f = fakeFetch({ nim: { status: 401 }, gemini: { status: 200, content: "from gemini" } });
+    const res = await createLlmClient({ db: openDb(":memory:"), env: both, fetch: f.impl, retry: { sleep: async () => {}, jitter: () => 1 } })(ask);
+    expect(res.provider).toBe("gemini");
+    expect(f.calls.map((c) => c.url.includes("nvidia"))).toEqual([true, false]);
   });
 
   it("LLM_PRIMARY=gemini tries Gemini first", async () => {
@@ -68,7 +91,7 @@ describe("createLlmClient", () => {
 
   it("throws LlmUnavailableError when every provider fails", async () => {
     const f = fakeFetch({ nim: { status: 500 }, gemini: { status: 500 } });
-    await expect(createLlmClient({ db, env: both, fetch: f.impl })(ask)).rejects.toBeInstanceOf(LlmUnavailableError);
+    await expect(createLlmClient({ db, env: both, fetch: f.impl, retry: { sleep: async () => {}, jitter: () => 1 } })(ask)).rejects.toBeInstanceOf(LlmUnavailableError);
   });
 
   it("refuses without calling anyone once the daily LLM budget is used up", async () => {

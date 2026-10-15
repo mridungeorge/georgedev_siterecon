@@ -1,12 +1,12 @@
 {
-  "fixtures": 37,
-  "expectedFindings": 87,
-  "foundExpected": 87,
+  "fixtures": 42,
+  "expectedFindings": 95,
+  "foundExpected": 95,
   "recall": 1,
   "falsePositives": 0,
   "evidenceValid": true,
   "deterministic": true,
   "failures": [],
-  "ranOn": "2026-10-10",
+  "ranOn": "2026-10-15",
   "recallFloor": 0.95
 }

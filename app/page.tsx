@@ -7,14 +7,14 @@ import { STEPS, type StepName } from "@/lib/pipeline/steps";
 import ReportView from "@/components/ReportView";
 
 const STEP_LABEL: Record<StepName, string> = {
-  fetch: "read site", render: "browser", technical: "seo", geo: "ai visibility", content: "content", marketing: "marketing", performance: "speed",
+  fetch: "read site", render: "browser", technical: "seo", geo: "ai visibility", crawl: "crawl", citation: "citation", content: "content", marketing: "marketing", performance: "speed",
   social: "social", competitors: "competitors", synthesis: "report",
 };
 
 // What the audit is made of, shown the way RepoRecon shows its stack.
 const STACK_TICKER = [
-  "NVIDIA NIM", "Google Gemini", "PageSpeed Insights", "Headless Chromium", "Scrapling", "Agent-Reach",
-  "Evidence-checked AI", "Per-visitor rate limits", "No logins, public pages only",
+  "AI Readiness Score", "Deterministic scoring", "JSON-LD validation", "Headless Chromium", "PageSpeed Insights",
+  "Evidence-checked AI", "Impact vs effort plan", "SSRF-hardened fetching", "No logins, public pages only",
 ];
 
 export default function Home() {
@@ -39,9 +39,11 @@ export default function Home() {
           website recon
         </div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">SiteRecon</h1>
+        <p className="mt-1 text-lg font-medium text-accent">Technical SEO + LLM Search Intelligence</p>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-soft">
-          Paste a website address. SiteRecon reads the site and checks its search and AI-search readiness, content, speed, public social profiles and
-          nearest competitors, then gives you a prioritised fix list and a prompt you can hand to Claude. Every finding quotes evidence from the page.
+          Evidence-based audits for AI visibility, technical health, and competitive gaps. Designed for engineers, not marketers.
+          Scores are computed in code from fixed rules, every finding quotes the page, and you get an AI Readiness Score, an
+          impact-vs-effort plan and ready-to-paste fixes.
         </p>
 
         <div className="mt-6 overflow-hidden border-y border-line py-2" aria-hidden="true">

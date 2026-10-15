@@ -38,8 +38,8 @@ const social: SocialSummary = {
 const item = (kit: ReturnType<typeof buildFixKit>, id: string) => kit.find((k) => k.id === id)!;
 
 describe("buildFixKit", () => {
-  it("builds nothing when no finding needs a file", () => {
-    expect(buildFixKit(snapshot(), modulesWith("technical:title", "content:cta-present"), social)).toEqual([]);
+  it("builds only the always-offered CI workflow when no finding needs a file", () => {
+    expect(buildFixKit(snapshot(), modulesWith("content:cta-present", "technical:single-h1"), social).map((k) => k.id)).toEqual(["ci-audit"]);
   });
 
   it("builds a canonical tag with the page's own address", () => {
@@ -150,13 +150,100 @@ describe("buildFixKit", () => {
     expect(headers.content).toMatch(/Caddy/i);
   });
 
+  describe("schema gaps", () => {
+    const words = (n: number) => Array.from({ length: n }, () => "word").join(" ");
+    const faq = `<html><head><title>Help | Acme</title></head><body><h1>Help</h1>${[1, 2, 3].map((i) => `<h2>Question ${i} about delivery?</h2><p>${words(30)}</p>`).join("")}</body></html>`;
+
+    it("builds FAQPage JSON-LD from the questions on the page when the citation finding fired", () => {
+      const kit = buildFixKit(snapshot(faq), modulesWith("citation:schema-fit"), null);
+      const item = kit.find((k) => k.id.startsWith("schema-faqpage"))!;
+      expect(item.language).toBe("json");
+      expect(JSON.parse(item.content)["@type"]).toBe("FAQPage");
+      expect(item.forFindings).toEqual(["citation:schema-fit"]);
+    });
+
+    it("builds nothing when the finding did not fire", () => {
+      expect(buildFixKit(snapshot(faq), [], null).some((k) => k.id.startsWith("schema-"))).toBe(false);
+    });
+  });
+
+  describe("schema that competitors publish", () => {
+    const rival = (domain: string, types: string[]) => ({
+      domain, url: `https://${domain}/`, source: "ai" as const, technical: 70, geo: 70, platforms: [], title: "", headline: "", description: "",
+      passed: [], schemaTypes: types, words: 300, topics: [], entities: [], sitemapUrls: 0,
+    });
+    const table = (rows: ReturnType<typeof rival>[]) => ({ rows, gaps: [], note: "" });
+
+    it("gives a fill-in FAQPage when most competitors have one and the page has no questions to build it from", () => {
+      const kit = buildFixKit(snapshot(), [], null, table([rival("a.example", ["FAQPage"]), rival("b.example", ["FAQPage"])]));
+      const item = kit.find((k) => k.id === "competitor-schema-faqpage")!;
+      const json = JSON.parse(item.content);
+      expect(json["@type"]).toBe("FAQPage");
+      expect(JSON.stringify(json)).toContain("REPLACE");
+      expect(item.note).toMatch(/a\.example, b\.example/);
+      expect(item.forFindings).toEqual([]);
+    });
+
+    it("does not add a fill-in when the page already has that type", () => {
+      const s = snapshot('<html><head><script type="application/ld+json">{"@type":"FAQPage","mainEntity":[]}</script></head><body></body></html>');
+      const kit = buildFixKit(s, [], null, table([rival("a.example", ["FAQPage"])]));
+      expect(kit.some((k) => k.id === "competitor-schema-faqpage")).toBe(false);
+    });
+
+    it("does not add one when only a minority of competitors have the type", () => {
+      const kit = buildFixKit(snapshot(), [], null, table([rival("a.example", ["Product"]), rival("b.example", []), rival("c.example", [])]));
+      expect(kit.some((k) => k.id.startsWith("competitor-schema-"))).toBe(false);
+    });
+
+    it("builds LocalBusiness from what the homepage states and marks the address to fill in", () => {
+      const kit = buildFixKit(snapshot(), [], null, table([rival("a.example", ["LocalBusiness"])]));
+      const json = JSON.parse(kit.find((k) => k.id === "competitor-schema-localbusiness")!.content);
+      expect(json["@type"]).toBe("LocalBusiness");
+      expect(json.telephone).toContain("+61");
+      expect(json.email).toBe("hello@example.com");
+      expect(JSON.stringify(json.address)).toContain("REPLACE");
+    });
+
+    it("leaves a built-from-the-page schema alone and does not duplicate it", () => {
+      const faq = `<html><head><title>Help</title></head><body><h1>Help</h1>${[1, 2, 3].map((i) => `<h2>Question ${i} about delivery?</h2><p>${"word ".repeat(30)}</p>`).join("")}</body></html>`;
+      const kit = buildFixKit(snapshot(faq), modulesWith("citation:schema-fit"), null, table([rival("a.example", ["FAQPage"])]));
+      expect(kit.filter((k) => /faqpage/i.test(k.id))).toHaveLength(1);
+    });
+  });
+
+  describe("meta tags, HSTS and CI", () => {
+    it("builds a title, description and viewport block from the page itself, escaped", () => {
+      const html = '<html><head><title>Tom &amp; "Jerry" | Cafe</title><meta name="description" content="Fresh <b>bread</b> daily."></head><body></body></html>';
+      const kit = buildFixKit(snapshot(html), modulesWith("technical:meta-description", "technical:viewport"), null);
+      const c = item(kit, "meta-tags").content;
+      expect(c).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
+      expect(c).toContain('<meta name="description" content="Fresh &lt;b&gt;bread&lt;/b&gt; daily.">');
+      expect(c).not.toContain("<b>");
+    });
+
+    it("adds a Strict-Transport-Security header to the headers item when HSTS is missing", () => {
+      const kit = buildFixKit(snapshot(), modulesWith("technical:hsts"), null);
+      expect(item(kit, "security-headers").content).toContain("Strict-Transport-Security");
+      expect(item(kit, "security-headers").forFindings).toEqual(["technical:hsts"]);
+    });
+
+    it("always offers a CI audit workflow pointing at the audited site", () => {
+      const kit = buildFixKit(snapshot(), [], null);
+      const ci = item(kit, "ci-audit");
+      expect(ci.filename).toBe(".github/workflows/siterecon.yml");
+      expect(ci.content).toContain("schedule:");
+      expect(ci.content).toContain("https://example.com/");
+      expect(ci.forFindings).toEqual([]);
+    });
+  });
+
   it("only refers to findings that exist, and gives every item a title and a note", () => {
     const ids = ["technical:canonical", "technical:sitemap", "geo:llms-txt", "technical:open-graph", "technical:security-headers", "geo:organisation-schema", "technical:robots-txt"];
     const modules = modulesWith(...ids);
     const have = new Set(modules.flatMap((m) => m.findings.map((f) => f.id)));
     const kit = buildFixKit(snapshot(), modules, social);
-    expect(kit).toHaveLength(7);
-    for (const k of kit) {
+    expect(kit).toHaveLength(8);
+    for (const k of kit.filter((x) => x.id !== "ci-audit")) {
       expect(k.forFindings.length).toBeGreaterThan(0);
       for (const f of k.forFindings) expect(have.has(f)).toBe(true);
       expect(k.title.length).toBeGreaterThan(5);

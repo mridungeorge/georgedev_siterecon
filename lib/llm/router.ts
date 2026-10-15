@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { quotaLimits, tryConsumeQuota } from "../quota";
+import { isTransientStatus, TransientError, withBackoff, type BackoffOptions } from "../retry";
 
 // Model router (spec section 7), after RepoRecon's lib/llm/router.ts: NVIDIA NIM's free tier
 // first, Gemini's free tier as the fallback, reorderable with LLM_PRIMARY. RepoRecon's Ollama
@@ -25,6 +26,8 @@ export type LlmClient = (opts: LlmCallOptions) => Promise<LlmResult>;
 
 export interface LlmDeps {
   db: DatabaseSync;
+  /** Overrides the retry policy for a busy provider. Tests use it to avoid waiting. */
+  retry?: BackoffOptions;
   env?: Record<string, string | undefined>;
   fetch?: typeof fetch;
   now?: () => number;
@@ -70,22 +73,30 @@ export function createLlmClient(deps: LlmDeps): LlmClient {
     const failures: string[] = [];
     for (const provider of available) {
       try {
-        const timeout = AbortSignal.timeout(60_000);
-        const res = await doFetch(`${provider.baseUrl}/chat/completions`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${provider.apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: provider.model,
-            messages: [
-              { role: "system", content: opts.system },
-              { role: "user", content: opts.user },
-            ],
-            max_tokens: opts.maxTokens ?? 1500,
-            temperature: 0.2,
-            ...(opts.jsonOnly ? { response_format: { type: "json_object" } } : {}),
-          }),
-          signal: opts.signal ? AbortSignal.any([timeout, opts.signal]) : timeout,
-        });
+        // A busy or rate-limited provider is retried once with a short wait before the next provider is tried.
+        const res = await withBackoff(async () => {
+          const timeout = AbortSignal.timeout(60_000);
+          const answer = await doFetch(`${provider.baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${provider.apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: provider.model,
+              messages: [
+                { role: "system", content: opts.system },
+                { role: "user", content: opts.user },
+              ],
+              max_tokens: opts.maxTokens ?? 1500,
+              temperature: 0.2,
+              ...(opts.jsonOnly ? { response_format: { type: "json_object" } } : {}),
+            }),
+            signal: opts.signal ? AbortSignal.any([timeout, opts.signal]) : timeout,
+          });
+          if (!answer.ok && isTransientStatus(answer.status)) {
+            const header = Number(answer.headers.get("retry-after"));
+            throw new TransientError(`HTTP ${answer.status}`, answer.status, Number.isFinite(header) && header > 0 ? header * 1000 : undefined);
+          }
+          return answer;
+        }, { retries: 1, baseMs: 500, maxMs: 3_000, signal: opts.signal, ...deps.retry });
         if (!res.ok) {
           failures.push(`${provider.name} returned HTTP ${res.status}`);
           continue;
@@ -99,6 +110,10 @@ export function createLlmClient(deps: LlmDeps): LlmClient {
         return { content, provider: provider.name, model: provider.model };
       } catch (err) {
         if (opts.signal?.aborted) throw err; // the scan was cancelled: stop, do not try the next provider
+        if (err instanceof TransientError) {
+          failures.push(`${provider.name} returned HTTP ${err.status}`);
+          continue;
+        }
         failures.push(`${provider.name} failed (${err instanceof Error ? err.message : "unknown error"})`);
       }
     }

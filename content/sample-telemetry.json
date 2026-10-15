@@ -1,0 +1,248 @@
+{
+  "capturedAt": "2026-10-15T23:12:59.619Z",
+  "domain": "georgemridun.dev",
+  "note": "One real scan with no AI key, no PageSpeed key and no browser service, so only the rule-based modules ran.",
+  "wallClockMs": 6328,
+  "overallScore": 72,
+  "aiReadiness": {
+    "score": 65,
+    "band": "Moderate",
+    "verdict": "Moderate for AI-generated answers (65/100). Main gaps: no passage is the right length to be lifted whole; there are no question headings; there is no Organization schema naming who runs the site.",
+    "components": [
+      {
+        "id": "crawler-access",
+        "label": "Crawler access",
+        "weight": 25,
+        "score": 100,
+        "passed": [
+          "geo:ai-crawler-oai-searchbot",
+          "geo:ai-crawler-claude-searchbot",
+          "geo:ai-crawler-perplexitybot",
+          "geo:ai-crawler-googlebot",
+          "technical:indexable"
+        ],
+        "failed": []
+      },
+      {
+        "id": "structured-data",
+        "label": "Structured data quality",
+        "weight": 20,
+        "score": 100,
+        "passed": [
+          "technical:structured-data",
+          "technical:json-ld-valid",
+          "technical:schema-complete"
+        ],
+        "failed": []
+      },
+      {
+        "id": "answer-blocks",
+        "label": "Concise answer blocks",
+        "weight": 20,
+        "score": 40,
+        "passed": [
+          "geo:citable-passage",
+          "citation:structure"
+        ],
+        "failed": [
+          "geo:question-headings",
+          "content:readability",
+          "citation:answer-passage"
+        ]
+      },
+      {
+        "id": "entity-clarity",
+        "label": "Entity clarity",
+        "weight": 15,
+        "score": 0,
+        "passed": [],
+        "failed": [
+          "geo:organisation-schema",
+          "technical:canonical",
+          "content:about-page",
+          "citation:entity-early",
+          "citation:definition"
+        ]
+      },
+      {
+        "id": "render-parity",
+        "label": "Content visible without JavaScript",
+        "weight": 12,
+        "score": 100,
+        "passed": [
+          "geo:content-in-html",
+          "technical:not-truncated"
+        ],
+        "failed": []
+      },
+      {
+        "id": "freshness",
+        "label": "Freshness signals",
+        "weight": 8,
+        "score": 0,
+        "passed": [],
+        "failed": [
+          "geo:freshness-signals",
+          "geo:llms-txt"
+        ]
+      }
+    ]
+  },
+  "pagesScanned": 3,
+  "telemetry": {
+    "steps": [
+      {
+        "step": "fetch",
+        "ms": 4607,
+        "outcome": "done"
+      },
+      {
+        "step": "render",
+        "ms": 0,
+        "outcome": "done"
+      },
+      {
+        "step": "technical",
+        "ms": 189,
+        "outcome": "done"
+      },
+      {
+        "step": "geo",
+        "ms": 64,
+        "outcome": "done"
+      },
+      {
+        "step": "crawl",
+        "ms": 57,
+        "outcome": "done"
+      },
+      {
+        "step": "citation",
+        "ms": 243,
+        "outcome": "done"
+      },
+      {
+        "step": "content",
+        "ms": 127,
+        "outcome": "done"
+      },
+      {
+        "step": "marketing",
+        "ms": 75,
+        "outcome": "done"
+      },
+      {
+        "step": "performance",
+        "ms": 0,
+        "outcome": "warned"
+      },
+      {
+        "step": "social",
+        "ms": 21,
+        "outcome": "done"
+      },
+      {
+        "step": "competitors",
+        "ms": 830,
+        "outcome": "warned"
+      },
+      {
+        "step": "synthesis",
+        "ms": 111,
+        "outcome": "done"
+      }
+    ],
+    "totalMs": 6324,
+    "providers": [
+      {
+        "provider": "llm",
+        "steps": []
+      },
+      {
+        "provider": "pagespeed",
+        "steps": []
+      },
+      {
+        "provider": "fetchService",
+        "steps": []
+      }
+    ],
+    "estimatedCostUsd": 0,
+    "calls": {
+      "llm": 0,
+      "pagespeed": 0,
+      "search": 0,
+      "fetchService": 0,
+      "authority": 0,
+      "hackerNews": 0,
+      "pages": 10
+    }
+  },
+  "modules": [
+    {
+      "module": "technical",
+      "score": 85,
+      "status": "ok",
+      "findings": 6
+    },
+    {
+      "module": "geo",
+      "score": 70,
+      "status": "ok",
+      "findings": 4
+    },
+    {
+      "module": "crawl",
+      "score": 100,
+      "status": "ok",
+      "findings": 0
+    },
+    {
+      "module": "citation",
+      "score": 38,
+      "status": "partial",
+      "findings": 5
+    },
+    {
+      "module": "content",
+      "score": 80,
+      "status": "partial",
+      "findings": 3
+    },
+    {
+      "module": "marketing",
+      "score": 34,
+      "status": "partial",
+      "findings": 5
+    },
+    {
+      "module": "performance",
+      "score": null,
+      "status": "failed",
+      "findings": 0
+    },
+    {
+      "module": "social",
+      "score": 100,
+      "status": "partial",
+      "findings": 0
+    }
+  ],
+  "crawl": {
+    "statusClasses": {
+      "ok": 3,
+      "redirected": 0,
+      "clientError": 0,
+      "serverError": 0,
+      "unreachable": 0
+    },
+    "sitemapUrls": null,
+    "coverage": {
+      "sitemapUrls": 0,
+      "fetched": 0,
+      "complete": false
+    },
+    "orphanCheck": "no-sitemap",
+    "renderDiff": []
+  }
+}

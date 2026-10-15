@@ -116,3 +116,55 @@ needs a login is reported as such, never worked around. Checked live on 2026-10-
 
 Numbers are only ever taken from the page's own description, because a page body can show other accounts'
 counts. Nothing else from a profile is copied into a report except a fixed set of fields, cut short.
+
+## AI search and technical intelligence (2026-10-16)
+
+Specs: `docs/superpowers/specs/2026-10-16-ai-search-intelligence-design.md`. Built test-first. 825 unit tests, 134 service
+tests, the eval at 42 fixture sites and 95 seeded problems with 0 false positives, and the 10 adversarial cases.
+
+- **AI Readiness Score** (`lib/ai-readiness.ts`): a lens over existing check outcomes with six weighted components and a templated verdict. The overall grade and the existing module weights are unchanged.
+- **Positioning**: "Technical SEO + LLM Search Intelligence" on the home page, metadata, README and `/methodology`.
+- **Impact vs effort matrix**, **telemetry** (per report, `/telemetry`, MLflow step timings), a **pipeline diagram** and design principles on `/methodology`.
+- **Fix kit**: title, description and viewport tags, HSTS, a scheduled GitHub Actions audit, and FAQPage, Article and Product JSON-LD built from the page.
+- **Crawl module**: cross-page canonicals, orphan pages (only when the crawl was not capped), internal redirects, and raw against rendered links, headings and JSON-LD. The browser worker returns counts only, so no page text leaves it.
+- **Citation module**: eight rules per page, per-page scores, an extractable-facts summary and an AI answer-extraction simulation that is quote-verified and unscored.
+- **Core Web Vitals mapping** from PageSpeed audit details: LCP element and file, shifting elements, render blockers, heaviest scripts and field INP. No new scored check, so speed weights are unchanged.
+- **Competitor evidence**: schema types, homepage depth and heading topics, each with the competitor named and what to add.
+
+Judgement calls worth knowing:
+
+- Passages of 134 to 167 words are a heuristic, not a rule any engine publishes. A quotable but not ideal passage costs score and raises no finding; only an inner page with nothing quotable does.
+- `facts` is held to the homepage only, and `authority` to article-like pages, because the eval showed them firing on every ordinary page.
+- Orphan-page detection says nothing when the crawl reached its 10-page cap, because most pages would look orphaned.
+- No paid backlink source is used (CLAUDE.md forbids a paid dependency). Authority signals are outbound citations and the existing Hacker News count.
+- Core Web Vitals come from one PageSpeed lab run, so element names can vary between runs. A real headless-Chromium measurement was not added.
+
+### Closing the gaps (2026-10-16, second pass)
+
+- **Backoff** (`lib/retry.ts`): PageSpeed, both AI providers, Tavily, Hacker News and the authority lookups retry a 408, 425, 429 or 5xx answer and a network blip, with capped exponential waits, jitter and Retry-After. A refused key is never retried, and a cancelled scan stops at once.
+- **Browser vitals** (`fetch-service/app/render.py`): LCP, CLS and INP from the audit's own Chromium, so Core Web Vitals appear even with no PageSpeed key, plus hydration-mismatch detection. The worker still returns only numbers and one element tag from a fixed list. INP comes from one synthetic key press and click, so 0 means "not recorded".
+- **Full sitemap crawl** (`lib/site-crawl.ts`): up to 40 sitemap pages the main crawl did not read, 4 at a time, respecting robots.txt. Orphan detection and the status distribution now rest on that link graph and say plainly when the sitemap was too large to cover.
+- **Keyword answer extraction and AI clarity review** (`lib/checks/answer-extraction.ts`): the page's own top keywords are put to the model, and vague claims, unexplained terms and unclear references become findings with weight 0. Both need a quote from the page.
+- **External authority** (`lib/authority.ts`): Open PageRank (free key) and Wikidata feed one citation criterion worth 12 points. It costs score and never raises a finding. Nothing measured means the criterion is left out.
+- **Competitors**: named-entity overlap and sitemap size, and fill-in schema items for the types most competitors publish.
+- **Telemetry** now counts the real requests made to each provider and to site pages.
+- **Impact chart**: a plotted impact-against-effort chart with a numbered legend, in addition to the lists.
+- **CI workflow** is a Node script instead of grep and jq, and `tests/ci-snippet.test.ts` runs the exact script from the fix kit against a local server.
+- **Portfolio**: `SiteReconInternals` shows the pipeline diagram, the design principles and the telemetry of one real scan (`content/sample-telemetry.json`, written by `scripts/capture-telemetry.ts`).
+
+### Browser time-out (found and fixed)
+
+A tracker-heavy site (287 requests) made the browser step run past its limit and be skipped. Two causes, both reproduced against real Chromium:
+
+1. The request filter closed every WebSocket the moment it opened. Pages with a chat widget reconnect in a tight loop, which starved the browser. A handler that does nothing mocks the socket and reaches no network.
+2. Waiting for "network idle" has no limit of its own in Scrapling and never completes on such a site. The wait is now bounded at 3 s.
+
+That page went from no result in 2 minutes to about 20 s. DNS answers are also cached per render, a hydration match now needs a real mismatch error (a theme logging "hydrating 345 sections" at debug level had triggered it), and a genuine timeout is reported as one.
+
+### Still not done
+
+- `content/sample-report.json` still shows the older layout. Regenerating it needs a scan with the AI keys, and I did not run one against your keys.
+- The Open PageRank request is written to its documented format and tested against a fake. It has not been run against the live API, because there is no key here.
+- Core Web Vitals element names and files come from PageSpeed. The browser fallback names only the kind of element.
+- Mapping to source components is not possible from outside a site: the report gives selectors and files.
+- The scan of georgemridun.dev used for the portfolio telemetry ran without AI, PageSpeed or the browser service, and the panel says so.

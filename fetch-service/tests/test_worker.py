@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from app.render import RenderError, make_subprocess_renderer, request_allowed, run_hard
+from app.render import RenderError, cached_resolver, make_subprocess_renderer, request_allowed, run_hard
 from app.routing import url_matches_platform
 from conftest import AUTH, make_client, public_resolver
 
@@ -66,6 +66,22 @@ class TestSubprocessRenderer:
     def test_parses_the_last_line_the_worker_printed_and_ignores_log_noise(self):
         out = self.render("print('INFO: Fetched (200)'); print('{\"words\": 7, \"mobileOverflow\": true}')")
         assert out == {"words": 7, "mobileOverflow": True}
+
+    def test_passes_through_structure_counts_and_drops_invalid_ones(self):
+        out = self.render(
+            "print('{\"words\": 7, \"mobileOverflow\": false, \"h1\": 1, \"links\": 12, \"jsonLd\": 2, \"titleChars\": 30}')"
+        )
+        assert out == {"words": 7, "mobileOverflow": False, "h1": 1, "links": 12, "jsonLd": 2, "titleChars": 30}
+        bad = self.render("print('{\"words\": 7, \"mobileOverflow\": false, \"h1\": \"one\", \"links\": -3, \"jsonLd\": true, \"evil\": 5}')")
+        assert bad == {"words": 7, "mobileOverflow": False}
+
+    def test_passes_through_vitals_and_only_allows_a_known_element_tag(self):
+        out = self.render(
+            "print('{\"words\": 7, \"mobileOverflow\": false, \"lcpMs\": 2300, \"clsMilli\": 120, \"inpMs\": 180, \"hydrationErrors\": 2, \"lcpTag\": \"img\"}')"
+        )
+        assert out == {"words": 7, "mobileOverflow": False, "lcpMs": 2300, "clsMilli": 120, "inpMs": 180, "hydrationErrors": 2, "lcpTag": "img"}
+        bad = self.render("print('{\"words\": 7, \"mobileOverflow\": false, \"lcpTag\": \"<script>alert(1)</script>\", \"lcpMs\": -5}')")
+        assert bad == {"words": 7, "mobileOverflow": False}
 
     @pytest.mark.parametrize("code", ["print('not json')", "print('{\"words\": \"many\"}')", "print('[1,2]')", "pass"])
     def test_garbage_output_is_a_render_error(self, code):
@@ -137,3 +153,93 @@ def test_the_memory_skip_reason_does_not_expose_the_hosts_numbers():
     assert body["status"] == "skipped"
     assert "312" not in body["reason"] and "400" not in body["reason"]
     assert "memory" in body["reason"]
+
+
+class TestCachedResolver:
+    def test_looks_each_name_up_once_however_many_requests_use_it(self):
+        calls = []
+
+        def counting(host, *args, **kwargs):
+            calls.append(host)
+            return [(2, 1, 6, "", ("93.184.216.34", 0))]
+
+        resolver = cached_resolver(counting)
+        for _ in range(200):
+            assert request_allowed("https://cdn.example.com/a.js", resolver) is True
+        assert request_allowed("https://other.example.com/", resolver) is True
+        assert calls == ["cdn.example.com", "other.example.com"]
+
+    def test_remembers_a_failure_too_so_a_dead_name_is_not_retried_on_every_request(self):
+        calls = []
+
+        def failing(host, *args, **kwargs):
+            calls.append(host)
+            raise OSError("no such host")
+
+        resolver = cached_resolver(failing)
+        for _ in range(5):
+            assert request_allowed("https://dead.example.com/x", resolver) is False
+        assert calls == ["dead.example.com"]
+
+    def test_still_refuses_a_name_that_resolves_privately(self):
+        resolver = cached_resolver(lambda host, *a, **k: [(2, 1, 6, "", ("10.0.0.5", 0))])
+        assert request_allowed("https://rebind.example/", resolver) is False
+
+
+class TestWebsocketHandling:
+    def test_websockets_are_mocked_not_closed_on_sight(self):
+        """Closing each socket at once made chat-widget sites reconnect in a loop and stall the whole render."""
+        from pathlib import Path
+
+        source = (Path(__file__).resolve().parent.parent / "app" / "render.py").read_text(encoding="utf8")
+        assert "ws.close()" not in source
+        assert "route_web_socket" in source
+
+    def test_the_handler_does_nothing_and_so_never_reaches_the_network(self):
+        from app.render import WEBSOCKET_HANDLER
+
+        class Socket:
+            connected = False
+
+            def connect_to_server(self):
+                self.connected = True
+
+        ws = Socket()
+        assert WEBSOCKET_HANDLER(ws) is None
+        assert ws.connected is False
+
+
+class TestHydrationMatcher:
+    @pytest.mark.parametrize(
+        "kind,text",
+        [
+            ("error", "Hydration failed because the initial UI does not match what was rendered on the server."),
+            ("error", "Uncaught Error: Minified React error #418; visit https://reactjs.org/docs/error-decoder.html?invariant=418"),
+            ("error", "Uncaught Error: Minified React error #423"),
+            ("warning", "Warning: Text content did not match. Server: \"3\" Client: \"4\""),
+            ("warning", "Warning: Prop `className` did not match. Server: \"a\" Client: \"b\""),
+            ("warning", "[Vue warn]: Hydration node mismatch:"),
+            ("warning", "[Vue warn]: Hydration completed but contains mismatches."),
+            ("error", "There was an error while hydrating. Because the error happened outside of a Suspense boundary"),
+        ],
+    )
+    def test_real_mismatch_messages_are_counted(self, kind, text):
+        from app.render import is_hydration_error
+
+        assert is_hydration_error(kind, text) is True
+
+    @pytest.mark.parametrize(
+        "kind,text",
+        [
+            ("debug", "hydrating 345 sections"),
+            ("log", "Hydration failed because the initial UI does not match"),  # a plain log is not an error
+            ("error", "Failed to load resource: the server responded with a status of 404"),
+            ("warning", "The resource was preloaded but not used"),
+            ("error", "Refused to apply style because its MIME type does not match"),
+            ("info", "Hydrated 12 islands in 40ms"),
+        ],
+    )
+    def test_ordinary_messages_are_not(self, kind, text):
+        from app.render import is_hydration_error
+
+        assert is_hydration_error(kind, text) is False

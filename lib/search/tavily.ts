@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { quotaLimits, tryConsumeQuota } from "@/lib/quota";
+import { TransientError, withBackoff, type BackoffOptions } from "@/lib/retry";
 
 /** Returns the URLs of web search results for a query. */
 export type SearchFn = (query: string, signal?: AbortSignal) => Promise<string[]>;
@@ -9,6 +10,7 @@ export interface TavilyOptions {
   db: DatabaseSync;
   fetch?: typeof fetch;
   env?: Record<string, string | undefined>;
+  retry?: BackoffOptions;
 }
 
 /**
@@ -22,12 +24,20 @@ export function createTavilySearch(opts: TavilyOptions): SearchFn {
     if (!opts.apiKey) return [];
     if (!tryConsumeQuota(opts.db, "search", Date.now(), quotaLimits(opts.env ?? process.env))) return [];
     try {
-      const timeout = AbortSignal.timeout(15_000);
-      const res = await doFetch("https://api.tavily.com/search", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ query, max_results: 8, search_depth: "basic" }),
-        signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
+      // One retry on a busy answer (429 or 5xx). A refused key is not retried, so it still logs at once.
+      const res = await withBackoff(async () => {
+        const timeout = AbortSignal.timeout(15_000);
+        const answer = await doFetch("https://api.tavily.com/search", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${opts.apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ query, max_results: 8, search_depth: "basic" }),
+          signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
+        });
+        if (answer.status >= 500 && answer.status <= 599) throw new TransientError(`HTTP ${answer.status}`, answer.status);
+        return answer;
+      }, { retries: 1, baseMs: 400, maxMs: 2_000, signal, ...opts.retry }).catch((err) => {
+        if (err instanceof TransientError) return { ok: false, status: err.status ?? 500 } as Response;
+        throw err;
       });
       if (!res.ok) {
         // For the person running the server: a refused key would otherwise look exactly like "no results".
