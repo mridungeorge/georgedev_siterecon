@@ -15,6 +15,11 @@ export default async function MethodologyPage() {
         A module score is the share of its check weight that passed, worked out in code. The overall score is the weighted mean of the modules
         that could be measured. A model never sets a score. This page is generated from the checks themselves, so it cannot drift from them.
       </p>
+      <p className="mt-2 text-[var(--muted)]">
+        SiteRecon is a technical SEO and LLM-search intelligence audit: deterministic checks are the source of truth, while AI is used only for
+        optional explanations, competitor suggestions and ideas. If an external provider is unavailable, that part is marked &quot;couldn&apos;t check&quot; and
+        the deterministic report still completes.
+      </p>
 
       {table.map((m) => (
         <section key={m.module} className="mt-10">

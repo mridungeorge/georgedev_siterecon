@@ -3,6 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Finding, FixKitItem, ModuleResult, Report } from "@/lib/pipeline/schemas";
 import { reportToMarkdown } from "@/lib/report-markdown";
+import { computeAiReadiness } from "@/lib/ai-readiness";
 
 // Laid out like RepoRecon's report: numbered section labels, one collapsible card per finding with a
 // severity bar, and the same colours. Every piece of text here comes from the audited site or a model,
@@ -143,6 +144,7 @@ export default function ReportView({ report, permalink = true }: { report: Repor
   const linkPrompt = encodeURIComponent(report.fixPrompt.slice(0, 6000));
   const myPlatforms = Array.from(new Set((report.social?.profiles ?? []).filter((p) => p.kind === "profile").map((p) => p.platform)));
   const score = (m: string) => report.modules.find((x) => x.module === m)?.score ?? null;
+  const aiReadiness = computeAiReadiness(report);
 
   return (
     <div className="space-y-10">
@@ -150,6 +152,16 @@ export default function ReportView({ report, permalink = true }: { report: Repor
         Audit of <span className="break-all text-ink-soft">{report.url}</span> · {new Date(report.createdAt).toLocaleString()} · {report.pagesScanned.length} page
         {report.pagesScanned.length === 1 ? "" : "s"} read
       </p>
+
+      <div className="rounded border border-line bg-surface p-5">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">AI Readiness Score</p>
+        <div className="mt-2 flex flex-wrap items-baseline gap-4">
+          <span className={`font-display text-6xl font-semibold leading-none ${scoreColor(aiReadiness.score)}`}>{aiReadiness.score ?? "n/a"}</span>
+          <span className="text-sm text-ink-soft">Technical SEO + LLM Search Intelligence, scored from deterministic rules only.</span>
+        </div>
+        <p className="mt-3 text-sm text-ink">{aiReadiness.largestWeakness}</p>
+        <p className="mt-2 text-xs text-muted">{aiReadiness.deterministicNote}</p>
+      </div>
 
       {report.injectionFlags > 0 && (
         <div className="rounded border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">

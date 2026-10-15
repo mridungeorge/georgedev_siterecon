@@ -36,12 +36,14 @@ export default function Home() {
       <main className="mx-auto w-full max-w-4xl">
         <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] text-muted">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-live animate-pulse-dot" />
-          website recon
+          technical seo + llm search intelligence
         </div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">SiteRecon</h1>
+        <p className="mt-1 font-mono text-xs uppercase tracking-[0.18em] text-muted">Technical SEO + LLM Search Intelligence</p>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-soft">
-          Paste a website address. SiteRecon reads the site and checks its search and AI-search readiness, content, speed, public social profiles and
-          nearest competitors, then gives you a prioritised fix list and a prompt you can hand to Claude. Every finding quotes evidence from the page.
+          Evidence-based audits for AI visibility, technical health, and competitive gaps. Designed for engineers, not marketers. SiteRecon reads the
+          site and checks technical SEO, AI-search readiness, performance, content, public social profiles and nearest competitors, then gives you a
+          prioritised fix list and a prompt you can hand to Claude. Every finding quotes evidence from the page.
         </p>
 
         <div className="mt-6 overflow-hidden border-y border-line py-2" aria-hidden="true">
@@ -70,7 +72,7 @@ export default function Home() {
           </button>
         </form>
         <p className="mt-3 font-mono text-xs text-muted">
-          Free. Reads public pages only and respects robots.txt.{" "}
+          Free-tier audit. Deterministic scoring first, AI only for explanations and suggestions. Reads public pages only and respects robots.txt.{" "}
           <Link href="/sample" className="underline hover:text-accent">Sample report</Link> ·{" "}
           <Link href="/methodology" className="underline hover:text-accent">What is checked</Link> ·{" "}
           <Link href="/accuracy" className="underline hover:text-accent">How it is tested</Link>

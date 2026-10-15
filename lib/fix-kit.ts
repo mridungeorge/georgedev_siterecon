@@ -138,6 +138,62 @@ export function buildFixKit(s: SiteSnapshot, modules: ModuleResult[], social: So
     });
   }
 
+  const faq = triggers(["technical:faq-schema"]);
+  if (faq.length) {
+    kit.push({
+      id: "faq-schema", title: "FAQPage structured data", filename: 'a <script type="application/ld+json"> on FAQ-like pages', language: "json",
+      content: safeJson({
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: [{
+          "@type": "Question",
+          name: "Question from your H2/H3",
+          acceptedAnswer: { "@type": "Answer", text: "Answer from the paragraph directly below it." },
+        }],
+      }),
+      note: "Use exact on-page questions and answers. Keep schema text aligned with what visitors can read.",
+      forFindings: faq,
+    });
+  }
+
+  const articleSchema = triggers(["technical:article-schema-opportunity"]);
+  if (articleSchema.length) {
+    kit.push({
+      id: "article-schema", title: "Article structured data", filename: 'a <script type="application/ld+json"> on article pages', language: "json",
+      content: safeJson({
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: pageTitle(home) || "Article headline",
+        author: { "@type": "Person", name: "Author name" },
+        datePublished: new Date().toISOString().slice(0, 10),
+        dateModified: new Date().toISOString().slice(0, 10),
+      }),
+      note: "Set real author names and dates. Match the visible byline and update date on the page.",
+      forFindings: articleSchema,
+    });
+  }
+
+  const productSchema = triggers(["technical:product-schema-opportunity"]);
+  if (productSchema.length) {
+    kit.push({
+      id: "product-schema", title: "Product structured data", filename: 'a <script type="application/ld+json"> on product pages', language: "json",
+      content: safeJson({
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: home("h1").first().text().trim() || "Product name",
+        description: description(home) || "What the product is and who it is for.",
+        offers: {
+          "@type": "Offer",
+          priceCurrency: "USD",
+          price: "99.00",
+          availability: "https://schema.org/InStock",
+        },
+      }),
+      note: "Replace placeholder currency and price with real offer data from the page.",
+      forFindings: productSchema,
+    });
+  }
+
   const og = triggers(["technical:open-graph"]);
   if (og.length) {
     const tags = [

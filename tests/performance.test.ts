@@ -3,19 +3,20 @@ import { runPerformanceChecks, type PageSpeedDeps } from "@/lib/checks/performan
 import { FindingSchema } from "@/lib/pipeline/schemas";
 import { buildModuleResult } from "@/lib/scoring";
 
-const psi = (m: { score: number; lcp: number; cls: number; tbt: number; fcp: number }) => ({
+const psi = (m: { score: number; lcp: number; cls: number; inp: number; tbt: number; fcp: number }) => ({
   lighthouseResult: {
     categories: { performance: { score: m.score } },
     audits: {
       "largest-contentful-paint": { numericValue: m.lcp },
       "cumulative-layout-shift": { numericValue: m.cls },
+      "interaction-to-next-paint": { numericValue: m.inp },
       "total-blocking-time": { numericValue: m.tbt },
       "first-contentful-paint": { numericValue: m.fcp },
     },
   },
 });
-const GOOD = psi({ score: 0.95, lcp: 1800, cls: 0.02, tbt: 120, fcp: 1200 });
-const BAD = psi({ score: 0.31, lcp: 6200, cls: 0.4, tbt: 900, fcp: 3900 });
+const GOOD = psi({ score: 0.95, lcp: 1800, cls: 0.02, inp: 150, tbt: 120, fcp: 1200 });
+const BAD = psi({ score: 0.31, lcp: 6200, cls: 0.4, inp: 1200, tbt: 900, fcp: 3900 });
 
 function deps(over: Partial<PageSpeedDeps> & { response?: unknown } = {}): PageSpeedDeps & { urls: string[] } {
   const urls: string[] = [];
@@ -39,7 +40,7 @@ describe("runPerformanceChecks", () => {
 
   it("flags every slow metric with the measured value as evidence", async () => {
     const r = await runPerformanceChecks("https://example.com/", deps({ response: BAD }));
-    expect(failed(r).sort()).toEqual(["cls", "fcp", "lcp", "perf-score", "tbt"]);
+    expect(failed(r).sort()).toEqual(["cls", "fcp", "inp", "lcp", "perf-score", "tbt"]);
     for (const o of r.outcomes.filter((x) => !x.passed)) expect(() => FindingSchema.parse(o.finding)).not.toThrow();
     const lcp = r.outcomes.find((o) => o.id === "lcp")!.finding!;
     expect(lcp.evidence[0].note).toMatch(/6\.2 s/);
@@ -79,19 +80,27 @@ describe("runPerformanceChecks", () => {
   describe("partial credit (Google grades vitals as good, needs improvement or poor)", () => {
     const score = async (m: Parameters<typeof psi>[0]) => buildModuleResult("performance", (await runPerformanceChecks("https://example.com/", deps({ response: psi(m) }))).outcomes).score;
     it("gives a fast page full marks", async () => {
-      expect(await score({ score: 0.95, lcp: 1800, cls: 0.02, tbt: 120, fcp: 1200 })).toBe(100);
+      expect(await score({ score: 0.95, lcp: 1800, cls: 0.02, inp: 150, tbt: 120, fcp: 1200 })).toBe(100);
     });
     it("gives half credit for every metric in the needs-improvement band, and the PageSpeed share for the score", async () => {
-      // perf-score 40 x 0.85 + (lcp 20 + cls 15 + tbt 15 + fcp 10) x 0.5
-      expect(await score({ score: 0.85, lcp: 3000, cls: 0.15, tbt: 400, fcp: 2200 })).toBe(64);
+      // perf-score 30 x 0.85 + (lcp 20 + cls 15 + inp 15 + tbt 10 + fcp 10) x 0.5
+      expect(await score({ score: 0.85, lcp: 3000, cls: 0.15, inp: 300, tbt: 400, fcp: 2200 })).toBe(60);
     });
     it("gives nothing for a metric in the poor band", async () => {
-      // only the PageSpeed share remains: 40 x 0.31
-      expect(await score({ score: 0.31, lcp: 6200, cls: 0.4, tbt: 900, fcp: 3900 })).toBe(12);
+      // only the PageSpeed share remains: 30 x 0.31
+      expect(await score({ score: 0.31, lcp: 6200, cls: 0.4, inp: 1200, tbt: 900, fcp: 3900 })).toBe(9);
     });
     it("still reports a finding for each metric that is not good", async () => {
-      const r = await runPerformanceChecks("https://example.com/", deps({ response: psi({ score: 0.85, lcp: 3000, cls: 0.15, tbt: 400, fcp: 2200 }) }));
-      expect(failed(r).sort()).toEqual(["cls", "fcp", "lcp", "perf-score", "tbt"]);
+      const r = await runPerformanceChecks("https://example.com/", deps({ response: psi({ score: 0.85, lcp: 3000, cls: 0.15, inp: 300, tbt: 400, fcp: 2200 }) }));
+      expect(failed(r).sort()).toEqual(["cls", "fcp", "inp", "lcp", "perf-score", "tbt"]);
     });
+  });
+
+  it("keeps scoring the metrics that are present and marks unavailable vitals as couldn't check", async () => {
+    const noInp = { lighthouseResult: { categories: { performance: { score: 0.95 } }, audits: { "largest-contentful-paint": { numericValue: 1800 }, "cumulative-layout-shift": { numericValue: 0.02 }, "total-blocking-time": { numericValue: 120 }, "first-contentful-paint": { numericValue: 1200 } } } };
+    const r = await runPerformanceChecks("https://example.com/", deps({ response: noInp }));
+    expect(r.outcomes.map((o) => o.id)).toEqual(expect.arrayContaining(["perf-score", "lcp", "cls", "tbt", "fcp"]));
+    expect(r.outcomes.map((o) => o.id)).not.toContain("inp");
+    expect(r.couldntCheck).toEqual(expect.arrayContaining([{ what: "INP", why: expect.stringMatching(/did not return/) }]));
   });
 });

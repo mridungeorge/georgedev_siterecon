@@ -44,13 +44,15 @@ export async function runPerformanceChecks(url: string, deps: PageSpeedDeps, sig
   const score = num(lh?.categories?.performance?.score);
   const lcp = num(lh?.audits?.["largest-contentful-paint"]?.numericValue);
   const cls = num(lh?.audits?.["cumulative-layout-shift"]?.numericValue);
+  const inp = num(lh?.audits?.["interaction-to-next-paint"]?.numericValue);
   const tbt = num(lh?.audits?.["total-blocking-time"]?.numericValue);
   const fcp = num(lh?.audits?.["first-contentful-paint"]?.numericValue);
-  if (score === null || lcp === null || cls === null || tbt === null || fcp === null) {
+  if (score === null && lcp === null && cls === null && inp === null && tbt === null && fcp === null) {
     return unavailable("it returned incomplete data");
   }
 
   const { outcomes, check } = makeChecker("performance");
+  const couldntCheck: CouldntCheck[] = [];
   // Google grades each vital as good, needs improvement or poor. Needs improvement earns half the
   // weight, so a page that is nearly there is not scored like one that is hopeless.
   const band = (value: number, good: number, poor: number) => (value <= good ? 1 : value <= poor ? 0.5 : 0);
@@ -58,40 +60,59 @@ export async function runPerformanceChecks(url: string, deps: PageSpeedDeps, sig
   const note = (text: string) => [{ url, note: `${text}. Measured by Google PageSpeed Insights, mobile lab data.` }];
   const slow = (title: string, detail: string, fix: string, evidence: Finding["evidence"]): Omit<Finding, "id" | "module"> =>
     ({ severity: "medium", effort: "high", title, detail, fix, evidence });
+  const vitalMissing = (metric: string) => couldntCheck.push({ what: metric, why: "PageSpeed did not return this metric for the page" });
 
-  check("perf-score", 40, score >= 0.9, {
-    ...slow(
-      `The mobile performance score is ${Math.round(score * 100)} out of 100`,
-      "Slow pages lose visitors and rank lower, especially on mobile. 90 and above is considered good.",
-      "Work through the PageSpeed Insights opportunities: compress images, remove unused JavaScript and defer non-critical scripts.",
-      note(`Performance score ${Math.round(score * 100)}/100`),
-    ),
-    severity: score < 0.5 ? "high" : "medium",
-  }, score); // the PageSpeed score is itself a 0 to 1 measure, so a page at 85 keeps 85% of this weight
-  check("lcp", 20, lcp <= 2500, slow(
-    `The main content takes ${sec(lcp)} to appear`,
-    "Largest Contentful Paint measures when the main content is visible. Under 2.5 s is good.",
-    "Optimise the hero image or heading: compress and size the image, preload it, and cut render-blocking CSS and JavaScript.",
-    note(`LCP ${sec(lcp)} (good is under 2.5 s)`),
-  ), band(lcp, 2500, 4000));
-  check("cls", 15, cls <= 0.1, slow(
-    `The layout shifts while loading (CLS ${cls.toFixed(2)})`,
-    "Cumulative Layout Shift measures content jumping around as the page loads. Under 0.1 is good.",
-    "Set width and height on images and embeds, and reserve space for ads, banners and late-loading fonts.",
-    note(`CLS ${cls.toFixed(2)} (good is under 0.1)`),
-  ), band(cls, 0.1, 0.25));
-  check("tbt", 15, tbt <= 200, slow(
-    `The page is unresponsive for ${Math.round(tbt)} ms while loading`,
-    "Total Blocking Time measures how long scripts freeze the page. Under 200 ms is good.",
-    "Break up long JavaScript tasks, remove unused scripts and load third-party tags after the page is usable.",
-    note(`TBT ${Math.round(tbt)} ms (good is under 200 ms)`),
-  ), band(tbt, 200, 600));
-  check("fcp", 10, fcp <= 1800, slow(
-    `Nothing appears on screen for ${sec(fcp)}`,
-    "First Contentful Paint measures when the first content shows. Under 1.8 s is good.",
-    "Reduce server response time, inline critical CSS and remove render-blocking resources.",
-    note(`FCP ${sec(fcp)} (good is under 1.8 s)`),
-  ), band(fcp, 1800, 3000));
+  if (score !== null) {
+    check("perf-score", 30, score >= 0.9, {
+      ...slow(
+        `The mobile performance score is ${Math.round(score * 100)} out of 100`,
+        "Slow pages lose visitors and rank lower, especially on mobile. 90 and above is considered good.",
+        "Work through the PageSpeed Insights opportunities: compress images, remove unused JavaScript and defer non-critical scripts.",
+        note(`Performance score ${Math.round(score * 100)}/100`),
+      ),
+      severity: score < 0.5 ? "high" : "medium",
+    }, score);
+  } else vitalMissing("Performance score");
+  if (lcp !== null) {
+    check("lcp", 20, lcp <= 2500, slow(
+      `The main content takes ${sec(lcp)} to appear`,
+      "Largest Contentful Paint measures when the main content is visible. Under 2.5 s is good.",
+      "Optimise the hero image or heading: compress and size the image, preload it, and cut render-blocking CSS and JavaScript.",
+      note(`LCP ${sec(lcp)} (good is under 2.5 s)`),
+    ), band(lcp, 2500, 4000));
+  } else vitalMissing("LCP");
+  if (cls !== null) {
+    check("cls", 15, cls <= 0.1, slow(
+      `The layout shifts while loading (CLS ${cls.toFixed(2)})`,
+      "Cumulative Layout Shift measures content jumping around as the page loads. Under 0.1 is good.",
+      "Set width and height on images and embeds, and reserve space for ads, banners and late-loading fonts.",
+      note(`CLS ${cls.toFixed(2)} (good is under 0.1)`),
+    ), band(cls, 0.1, 0.25));
+  } else vitalMissing("CLS");
+  if (inp !== null) {
+    check("inp", 15, inp <= 200, slow(
+      `Interaction delay is ${Math.round(inp)} ms (INP)`,
+      "Interaction to Next Paint measures how quickly the page responds after a tap or click. Under 200 ms is good.",
+      "Reduce long JavaScript tasks and defer non-critical third-party scripts so taps and clicks respond quickly.",
+      note(`INP ${Math.round(inp)} ms (good is under 200 ms)`),
+    ), band(inp, 200, 500));
+  } else vitalMissing("INP");
+  if (tbt !== null) {
+    check("tbt", 10, tbt <= 200, slow(
+      `The page is unresponsive for ${Math.round(tbt)} ms while loading`,
+      "Total Blocking Time measures how long scripts freeze the page. Under 200 ms is good.",
+      "Break up long JavaScript tasks, remove unused scripts and load third-party tags after the page is usable.",
+      note(`TBT ${Math.round(tbt)} ms (good is under 200 ms)`),
+    ), band(tbt, 200, 600));
+  } else vitalMissing("TBT");
+  if (fcp !== null) {
+    check("fcp", 10, fcp <= 1800, slow(
+      `Nothing appears on screen for ${sec(fcp)}`,
+      "First Contentful Paint measures when the first content shows. Under 1.8 s is good.",
+      "Reduce server response time, inline critical CSS and remove render-blocking resources.",
+      note(`FCP ${sec(fcp)} (good is under 1.8 s)`),
+    ), band(fcp, 1800, 3000));
+  } else vitalMissing("FCP");
 
-  return { outcomes, couldntCheck: [] };
+  return { outcomes, couldntCheck };
 }

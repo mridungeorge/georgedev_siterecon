@@ -40,6 +40,11 @@ export const LABELS: Record<string, string> = {
   "robots-sitemap": "robots.txt points to the sitemap (only when robots.txt exists)",
   "hreflang-valid": "Alternate-language (hreflang) links are valid and include the page itself (only when the page declares any)",
   "article-authorship": "Articles name an author and a publish date (only on pages that declare an article)",
+  "faq-schema": "Question-led pages include FAQPage/QAPage schema (only when the page has multiple question headings)",
+  "article-schema-opportunity": "Article-like pages include Article/BlogPosting schema (only when the page appears to be an article)",
+  "product-schema-opportunity": "Product-like pages include Product schema (only when pricing or purchase language appears)",
+  "status-distribution": "Most followed internal links return 200 (only when inner pages were read)",
+  "orphan-page-signals": "Sitemap pages are linked from the homepage (only when a sitemap and inner pages exist)",
   "question-answers": "Each question heading is followed by an answer that can be quoted (only when the page has question headings)",
   "https-redirect": "The http:// address redirects to https:// (only when it could be tested)",
   "host-redirect": "Only one of the www and non-www addresses serves the site (only when the other could be tested)",
@@ -80,7 +85,7 @@ export const LABELS: Record<string, string> = {
   "cta-clarity": "AI review: the next step is clear", differentiation: "AI review: something concrete sets it apart",
   // Speed
   "perf-score": "Mobile performance score of 90 or more", lcp: "The main content appears within 2.5 seconds", cls: "The layout does not jump (shift under 0.1)",
-  tbt: "The page is not frozen by scripts (under 200 ms)", fcp: "Something appears within 1.8 seconds",
+  inp: "Interactions respond quickly (INP under 200 ms)", tbt: "The page is not frozen by scripts (under 200 ms)", fcp: "Something appears within 1.8 seconds",
   // Social
   "has-profiles": "Links two or more social profiles", "profile-links-valid": "No placeholder links to a platform's front page",
   "key-platforms": "Links Facebook, Instagram or LinkedIn", "schema-sameas": "Lists the profiles in the Organization sameAs field",
@@ -92,7 +97,7 @@ const SOURCES: Record<ModuleRubric["module"], string> = {
   geo: "The same fetch, read for AI search crawler rules (ChatGPT search, Claude search, Perplexity, Google), the text in the HTML, structured data and dates. Blocking an AI training crawler such as GPTBot is shown as a choice, never as a problem. No AI.",
   content: "Fixed checks on the page text (80 points), plus a small AI review (20 points). The AI's answers only count when they quote a specific passage that is really on the page.",
   marketing: "Fixed checks on the page's own HTML (70 points): measurement tags, lead capture, a visible offer, a content hub, review markup, risk reversal, specific proof and contact channels. Plus a messaging review by AI (30 points) whose answers only count when they quote a specific passage that is really on the page.",
-  performance: "Google PageSpeed Insights, one mobile lab run. Needs a free API key. Each vital earns full marks when good, half in Google's needs-improvement band and none when poor; the overall speed score earns its share in proportion.",
+  performance: "Google PageSpeed Insights, one mobile lab run. Needs a free API key. LCP, CLS and INP are scored when available and reported as couldn't-check when unavailable. Each vital earns full marks when good, half in Google's needs-improvement band and none when poor; the overall speed score earns its share in proportion.",
   social: "Social links found on the homepage, then each public profile page read without logging in. Pages that need a login are reported as unchecked. When a public page states its audience in the description it shows to anyone (for example Facebook's \"621,509 followers\"), that count is shown. Instagram business and creator accounts are read through Meta's official API when the server owner has connected one, which adds their follower count and latest post.",
 };
 

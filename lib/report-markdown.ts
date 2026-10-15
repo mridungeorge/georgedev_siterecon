@@ -1,4 +1,5 @@
 import type { Finding, Report } from "@/lib/pipeline/schemas";
+import { computeAiReadiness } from "@/lib/ai-readiness";
 
 // Turns a report into a Markdown document the visitor can keep. Much of a report is text taken from
 // the audited site or written by a model, so none of it is allowed to become markup: ordinary text is
@@ -44,8 +45,13 @@ function findingBlock(f: Finding, n: number): string {
 
 export function reportToMarkdown(report: Report): string {
   const out: string[] = [];
-  out.push(`# SiteRecon report: ${esc(report.domain)}`, "");
+  const aiReadiness = computeAiReadiness(report);
+  out.push(`# SiteRecon — Technical SEO + LLM Search Intelligence`, "");
+  out.push(`## Report: ${esc(report.domain)}`, "");
   out.push(`Scanned ${code(report.url)} on ${report.createdAt.slice(0, 10)}, ${report.pagesScanned.length} page${report.pagesScanned.length === 1 ? "" : "s"} read. Overall score: ${score(report.overallScore)}`, "");
+  out.push(`AI Readiness Score: ${score(aiReadiness.score)}`, "");
+  out.push(`${esc(aiReadiness.largestWeakness)}`, "");
+  out.push(`${esc(aiReadiness.deterministicNote)}`, "");
   if (report.injectionFlags > 0) {
     out.push(`> This site's text contains ${report.injectionFlags} instruction-like passage${report.injectionFlags === 1 ? "" : "s"} aimed at AI tools. SiteRecon treated them as ordinary text.`, "");
   }

@@ -22,6 +22,14 @@ const MAX_CANDIDATES = 6;
 const MAX_ROWS = 3;
 const GAP_POINTS = 10;
 const MAX_CHECK_GAPS = 4;
+const GAP_ACTIONS: Record<string, string> = {
+  "technical:structured-data": "Add Organization and page-type JSON-LD so entities are machine-readable.",
+  "technical:faq-schema": "Add FAQPage schema for question-led sections.",
+  "technical:product-schema-opportunity": "Add Product schema with Offer data on product pages.",
+  "geo:organisation-schema": "Add Organization or LocalBusiness schema with sameAs profiles.",
+  "geo:question-headings": "Add question-style headings with concise direct answers below each one.",
+  "geo:citable-passage": "Add 40–200 word passages that define the core offer in plain language.",
+};
 
 /** Never a competitor: networks, search engines, marketplaces, directories and reference sites. */
 const NOT_COMPETITORS = [
@@ -122,7 +130,8 @@ export function computeGaps(
     // The plain name of the check ("Has a canonical link"), not the finding's title, which can carry numbers from this one site.
     for (const { f, count } of specific) {
       const label = LABELS[f.id.replace(/^[a-z]+:/, "")] ?? f.title;
-      gaps.push(`${count} of ${measured.length} competitors pass this check and you do not: ${label}.`);
+      const action = GAP_ACTIONS[f.id];
+      gaps.push(`${count} of ${measured.length} competitors pass this check and you do not: ${label}.${action ? ` Action: ${action}` : ""}`);
     }
   }
   return gaps.length > 0 ? gaps : ["No clear gaps against these competitors."];

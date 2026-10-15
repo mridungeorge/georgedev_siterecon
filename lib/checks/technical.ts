@@ -33,6 +33,10 @@ function sitemapLocs(xml: string): string[] {
 }
 
 const MAX_EVIDENCE = 6;
+const FAQ_TYPES = new Set(["FAQPage", "QAPage"]);
+const PRODUCT_TYPES = new Set(["Product"]);
+
+const hasAnyType = (types: Set<string>, wanted: Set<string>) => [...types].some((t) => wanted.has(t));
 
 export function runTechnicalChecks(s: SiteSnapshot): CheckOutcome[] {
   const { outcomes, check } = makeChecker("technical");
@@ -226,6 +230,45 @@ export function runTechnicalChecks(s: SiteSnapshot): CheckOutcome[] {
     fix: "Fill in every property listed in the evidence with the real value, and remove any template text.",
     evidence: problems.slice(0, MAX_EVIDENCE).map((p): Evidence => ({ url, note: describeProblem(p), ...(p.text ? { quote: clip(p.text) } : {}) })),
   });
+
+  // ---- High-value schema opportunities by page pattern ----
+  const jsonTypes = new Set<string>();
+  for (const node of blocks.filter((b) => b.data !== null).flatMap((b) => nodesOfType([b], new Set([
+    "Organization", "LocalBusiness", "Article", "BlogPosting", "NewsArticle", "Product", "FAQPage", "QAPage",
+  ])))) {
+    for (const t of Array.isArray(node["@type"]) ? node["@type"] : [node["@type"]]) if (typeof t === "string") jsonTypes.add(t);
+  }
+  const questionHeadings = $("h2, h3").filter((_, el) => $(el).text().trim().endsWith("?")).length;
+  if (questionHeadings >= 2) {
+    check("faq-schema", 2, hasAnyType(jsonTypes, FAQ_TYPES), {
+      severity: "low", effort: "low",
+      title: "Question-led content has no FAQPage schema",
+      detail: "The page has question headings, but no FAQPage structured data to map question/answer pairs for AI and search systems.",
+      fix: 'Add FAQPage JSON-LD and include each visible question as a Question with an acceptedAnswer. Example: {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Question text","acceptedAnswer":{"@type":"Answer","text":"Answer text"}}]}',
+      evidence: at(`${questionHeadings} question-style headings found, no FAQPage or QAPage schema`),
+    });
+  }
+  const isArticleLike = $("article").length > 0 || /article/i.test($('meta[property="og:type"]').attr("content") ?? "");
+  if (isArticleLike) {
+    check("article-schema-opportunity", 2, [...jsonTypes].some((t) => ARTICLE_TYPES.has(t)), {
+      severity: "low", effort: "low",
+      title: "Article-like content has no Article schema",
+      detail: "This page appears to be an article, but no Article or BlogPosting schema was found.",
+      fix: 'Add Article JSON-LD with headline, author, datePublished and dateModified. Example: {"@context":"https://schema.org","@type":"Article","headline":"Page headline","author":{"@type":"Person","name":"Author name"},"datePublished":"2026-01-01","dateModified":"2026-01-01"}',
+      evidence: at("article elements or og:type=article found, but no Article/BlogPosting/NewsArticle schema"),
+    });
+  }
+  const bodyText = $("body").text().replace(/\s+/g, " ");
+  const productHints = /\$\s?\d|\b(usd|aud|eur|price|buy now|add to cart|checkout)\b/i.test(bodyText);
+  if (productHints) {
+    check("product-schema-opportunity", 2, hasAnyType(jsonTypes, PRODUCT_TYPES), {
+      severity: "low", effort: "medium",
+      title: "Product-like content has no Product schema",
+      detail: "The page shows pricing or buying language, but no Product structured data was found.",
+      fix: 'Add Product JSON-LD with name, description, image and offers. Example: {"@context":"https://schema.org","@type":"Product","name":"Product name","description":"What it is","offers":{"@type":"Offer","priceCurrency":"USD","price":"99.00","availability":"https://schema.org/InStock"}}',
+      evidence: at("pricing or purchase terms found in page text, no Product schema found"),
+    });
+  }
 
   // ---- Canonical: if there is one, it must be this page ----
   const canonicalKey = canonicalHref ? pageKey(canonicalHref, url) : null;
@@ -488,6 +531,49 @@ export function runTechnicalChecks(s: SiteSnapshot): CheckOutcome[] {
       fix: "Expand each page that is meant to rank with the information a visitor needs: what it is, who it is for, prices or steps, and answers to common questions.",
       evidence: thin.slice(0, MAX_EVIDENCE).map((p): Evidence => ({ url: p.url, note: `${p.words} words of text` })),
     });
+
+    const totalFollowed = s.pages.length + (s.brokenLinks?.length ?? 0);
+    const errorRate = totalFollowed === 0 ? 0 : ((s.brokenLinks?.length ?? 0) / totalFollowed);
+    check("status-distribution", 2, errorRate <= 0.2, {
+      severity: "medium", effort: "medium",
+      title: `${Math.round(errorRate * 100)}% of followed internal links returned errors`,
+      detail: "A high share of 4xx/5xx internal responses wastes crawl budget and weakens technical trust signals.",
+      fix: "Fix or redirect failing internal URLs and keep error responses below 20% of discovered links.",
+      evidence: at(`${s.pages.length} internal pages returned 200 and ${s.brokenLinks?.length ?? 0} returned 4xx/5xx`),
+    });
+  }
+
+  if (s.sitemapXml !== null && s.pages.length > 0) {
+    const host = stripWww(new URL(url).hostname);
+    const linked = new Set<string>();
+    $("a[href]").each((_, el) => {
+      const href = ($(el).attr("href") ?? "").trim();
+      if (!href || href.startsWith("#")) return;
+      try {
+        const u = new URL(href, url);
+        if (stripWww(u.hostname) === host) linked.add(trimSlash(u.pathname) || "/");
+      } catch {
+        // ignore malformed links
+      }
+    });
+    const sitemapPages = sitemapLocs(s.sitemapXml).flatMap((loc) => {
+      try {
+        const u = new URL(loc);
+        return stripWww(u.hostname) === host ? [trimSlash(u.pathname) || "/"] : [];
+      } catch {
+        return [];
+      }
+    });
+    const unlinked = [...new Set(sitemapPages)].filter((path) => path !== trimSlash(new URL(url).pathname) && !linked.has(path));
+    if (sitemapPages.length > 0) {
+      check("orphan-page-signals", 2, unlinked.length === 0, {
+        severity: "low", effort: "medium",
+        title: `${unlinked.length} sitemap page${unlinked.length === 1 ? " looks" : "s look"} unlinked from the homepage`,
+        detail: "Pages listed in the sitemap but not linked from navigation can be harder for crawlers and users to discover.",
+        fix: "Add internal links from key hub pages (usually the homepage or section pages) to important sitemap URLs.",
+        evidence: unlinked.slice(0, MAX_EVIDENCE).map((path): Evidence => ({ url: `${s.origin}${path}`, note: "in sitemap, but not linked from homepage navigation" })),
+      });
+    }
   }
 
   return outcomes;

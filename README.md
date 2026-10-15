@@ -1,6 +1,8 @@
-# SiteRecon
+# SiteRecon — Technical SEO + LLM Search Intelligence
 
-A free, public website audit. Paste an address and get a prioritised report on SEO, how well AI search can read the site, content and conversion, speed, public social presence and nearest competitors, plus a prompt you can hand to Claude to fix what was found.
+Evidence-based audits for AI visibility, technical health, and competitive gaps. Designed for engineers, not marketers.
+
+Paste an address and get a prioritised report on technical SEO, AI-search visibility, content and conversion, speed, public social presence and nearest competitors, plus a prompt you can hand to Claude to fix what was found.
 
 It is a sibling of RepoRecon (`../georgedev_AI`) and follows its structure: a Next.js app that streams progress over SSE, per-visitor rate limits, an eval harness that gates CI, an `/accuracy` page, and a deploy to the same VM.
 
