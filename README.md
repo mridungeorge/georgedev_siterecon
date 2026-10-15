@@ -1,6 +1,6 @@
 # SiteRecon
 
-A free, public website audit. Paste an address and get a prioritised report on SEO, how well AI search can read the site, content and conversion, speed, public social presence and nearest competitors, plus a prompt you can hand to Claude to fix what was found.
+**Technical SEO + LLM Search Intelligence.** Evidence-based audits for AI visibility, technical health and competitive gaps, built for engineers. Paste an address and get an AI Readiness Score, a prioritised impact-vs-effort plan, ready-to-paste fixes and a prompt you can hand to Claude. Scores are computed in code from fixed rules; a model only explains and suggests, and every claim it makes must quote the page.
 
 It is a sibling of RepoRecon (`../georgedev_AI`) and follows its structure: a Next.js app that streams progress over SSE, per-visitor rate limits, an eval harness that gates CI, an `/accuracy` page, and a deploy to the same VM.
 
@@ -13,7 +13,12 @@ It is a sibling of RepoRecon (`../georgedev_AI`) and follows its structure: a Ne
 | SEO (18 checks) | A plain fetch of the homepage, robots.txt, sitemap and headers. No AI. |
 | AI visibility (9 checks) | AI crawler rules, the text in the raw HTML, structured data. With the browser step, proof when content only appears after JavaScript runs. |
 | Content and conversion | 80 points of fixed checks. A small AI review can move 20 points, and only by quoting a specific passage that is really on the page. |
-| Speed | Google PageSpeed Insights (mobile lab data). Needs a free key. |
+| AI Readiness Score | A lens over the checks above and below: crawler access, structured data, answer blocks, entity clarity, render parity and freshness. Computed in code, weights on `/methodology`. |
+| AI citation potential | Fixed rules per page: names the business early, a defining sentence, a self-contained 134 to 167 word passage, concrete figures, structure, vague claims, matching schema, outside sources. Plus an AI answer-extraction simulation that only counts with a quote from the page and is never scored. |
+| Crawlability and rendering | Canonicals across pages, sitemap pages nothing links to, internal redirects, and (with the browser step) what a bot is served against what a browser shows. |
+| Speed | Google PageSpeed Insights (mobile lab data). Needs a free key. The LCP element and its file, shifting elements, render-blocking files, heavy scripts and field INP are named. |
+| Impact vs effort | The findings placed in a 2x2 from their severity and effort. |
+| Telemetry | How long each scan step took and how it ended, per report and across recent scans on `/telemetry`. |
 | Social | Links found on the homepage, then each public profile opened without logging in. |
 | Competitors | Suggested by AI, then each is fetched to prove it is a live site, and measured with the same checks. |
 | Marketing ideas | AI-written, each tied to a real finding. Ideas with links, emails, phone numbers or code are dropped. |

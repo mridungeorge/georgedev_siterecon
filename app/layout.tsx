@@ -14,8 +14,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SiteRecon",
-  description: "A free website audit for search and AI-search readiness, with a prioritised fix list and a Claude prompt.",
+  title: "SiteRecon: Technical SEO + LLM Search Intelligence",
+  description: "Evidence-based audits for AI visibility, technical health and competitive gaps. Deterministic scoring and ready-to-paste fixes.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -19,7 +19,7 @@ const REPORT: Report = {
   pagesScanned: ["https://acme.example/"], injectionFlags: 0,
   ideas: [{ title: "Add a title tag", why: "Search results need one.", findingId: "technical:title", effort: "low" }],
   social: { profiles: [{ platform: "github", url: "https://github.com/acme", handle: "acme", kind: "profile", status: "found" }], missing: ["facebook", "instagram", "linkedin"], mentions: { hackerNews: 3 }, readerUsed: true },
-  competitors: { rows: [{ domain: "rival.example", url: "https://rival.example/", source: "ai", technical: 90, geo: 60, platforms: ["facebook"], title: "Rival", headline: "Storage for all", description: "Rival sells shelving.", passed: [] }], gaps: ["1 of 1 competitors score at least 10 points higher on SEO."], note: "Suggested by AI." },
+  competitors: { rows: [{ domain: "rival.example", url: "https://rival.example/", source: "ai", technical: 90, geo: 60, platforms: ["facebook"], title: "Rival", headline: "Storage for all", description: "Rival sells shelving.", passed: [], schemaTypes: [], words: 0, topics: [], entities: [], sitemapUrls: 0 }], gaps: ["1 of 1 competitors score at least 10 points higher on SEO."], note: "Suggested by AI." },
   summary: {
     grade: "C", verdict: "Decent (C, 71/100). Strongest: SEO (80), weakest: Speed (40). 1 issue found, 1 of them a quick win.",
     strongest: { module: "technical", score: 80 }, weakest: { module: "performance", score: 40 },
@@ -34,6 +34,9 @@ const REPORT: Report = {
     { url: "https://acme.example/", title: "Acme", description: "Shelving for small homes.", headline: "Shelving for small homes", h1: 1, words: 312, issues: 2 },
     { url: "https://acme.example/about", title: "", description: "", headline: "", h1: 0, words: 40, issues: 3 },
   ],
+  aiReadiness: null,
+  telemetry: null,
+  insights: null,
 };
 
 describe("reportToMarkdown", () => {
@@ -155,5 +158,48 @@ describe("reportToMarkdown pages table", () => {
   });
   it("is left out when no pages were recorded", () => {
     expect(reportToMarkdown({ ...REPORT, pageTable: [] })).not.toContain("## Pages read");
+  });
+});
+
+describe("reportToMarkdown insights", () => {
+  const insights = {
+    vitals: {
+      source: "pagespeed" as const,
+      lcp: { ms: 5200, element: "div.hero > img", resource: "https://acme.example/hero.jpg" },
+      cls: { value: 0.31, shifts: [{ selector: "div.banner", score: 0.22 }] },
+      inp: { ms: 380, rating: "needs improvement" as const, source: "field" as const },
+      blockers: [{ url: "https://acme.example/site.css", wastedMs: 640 }],
+      heavyScripts: [],
+    },
+    crawl: { statusClasses: { ok: 3, redirected: 1, clientError: 0, serverError: 0, unreachable: 0 }, sitemapUrls: 3, coverage: null, orphanCheck: "no-sitemap" as const, renderDiff: [{ label: "internal links", raw: 3, rendered: 25 }] },
+    citation: {
+      pages: [{ url: "https://acme.example/", score: 70, criteria: { "entity-early": "pass" as const, facts: "fail" as const } }],
+      extractable: { entity: "Acme", definition: "Acme makes shelving.", facts: ["12 years"], questions: [] },
+      authority: null,
+      aiExtraction: [{ id: "who", label: "Who", kind: "fact" as const, extractable: true, quote: "Acme makes shelving" }],
+    },
+    schemaGaps: [],
+  };
+
+  it("adds vitals, crawl and citation sections", () => {
+    const md = reportToMarkdown({ ...REPORT, insights });
+    expect(md).toContain("## Core Web Vitals, mapped");
+    expect(md).toContain("LCP 5.2 s");
+    expect(md).toContain("div.hero › img"); // code spans swap angle brackets for look-alikes
+    expect(md).toContain("## Crawlability and rendering");
+    expect(md).toMatch(/internal links \| 3 \| 25/);
+    expect(md).toContain("## AI citation potential");
+    expect(md).toContain("facts");
+  });
+
+  it("leaves them out when there are no insights", () => {
+    const md = reportToMarkdown({ ...REPORT, insights: null });
+    expect(md).not.toContain("## Core Web Vitals, mapped");
+    expect(md).not.toContain("## AI citation potential");
+  });
+
+  it("keeps page-controlled selectors inside code spans", () => {
+    const hostile = { ...insights, vitals: { ...insights.vitals, lcp: { ...insights.vitals.lcp, element: "x`<script>alert(1)</script>" } } };
+    expect(reportToMarkdown({ ...REPORT, insights: hostile })).not.toContain("<script>");
   });
 });

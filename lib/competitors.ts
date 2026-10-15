@@ -5,6 +5,8 @@ import { runGeoChecks } from "@/lib/checks/geo";
 import { LABELS } from "@/lib/methodology";
 import { buildModuleResult } from "@/lib/scoring";
 import { extractSocialLinks } from "@/lib/social/platforms";
+import { analysePage } from "@/lib/checks/page-analysis";
+import { sitemapLocations } from "@/lib/site-crawl";
 import { normalizeTargetUrl, registrableDomain } from "@/lib/url-guard";
 
 export { registrableDomain };
@@ -41,6 +43,51 @@ export interface SiteProfile {
   platforms: Platform[];
   /** The site's own failed SEO and AI-visibility checks, by finding id and title, to compare with rivals. */
   failures?: { id: string; title: string }[];
+  /** schema.org types on the site's homepage, its words of text and the topics in its headings, to compare with rivals. */
+  schemaTypes?: string[];
+  words?: number;
+  topics?: string[];
+  entities?: string[];
+  sitemapUrls?: number;
+}
+
+/** What to add for each kind of structured data, in the words of schema.org. Only types competitors commonly use. */
+const SCHEMA_ADVICE: Record<string, string> = {
+  FAQPage: "FAQPage with mainEntity: a list of Question items, each with a name and an acceptedAnswer.text",
+  Product: "Product with name, image, description and offers (price, priceCurrency, availability)",
+  Article: "Article with headline, datePublished, author and image",
+  BlogPosting: "BlogPosting with headline, datePublished, author and image",
+  LocalBusiness: "LocalBusiness with name, address, telephone and openingHours",
+  Organization: "Organization with name, url, logo and sameAs",
+  BreadcrumbList: "BreadcrumbList with an itemListElement for each level of the path",
+  AggregateRating: "AggregateRating with ratingValue and reviewCount, inside the item being rated",
+  WebSite: "WebSite with name and url",
+  HowTo: "HowTo with name and a list of step items",
+};
+const STOPWORDS = new Set(["this", "that", "with", "from", "your", "have", "will", "about", "more", "what", "when", "where", "which", "their", "them", "they", "home", "page", "shop", "online", "welcome", "best", "quality", "products", "product", "service", "services", "contact", "australia", "australian", "free", "view", "news", "blog", "menu", "search"]);
+
+const NOT_ENTITIES = new Set(["the", "our", "we", "your", "you", "welcome", "home", "about", "contact", "shop", "view", "read", "more", "shopping", "cart", "login", "sign", "free", "new", "all", "get", "see", "why", "how", "what", "when", "where", "who", "this", "that"]);
+
+/** Capitalised names (one to four words) from text, lower case, most repeated first. A rough stand-in for named entities. */
+export function entitiesOf(texts: string[], limit = 12): string[] {
+  const counts = new Map<string, number>();
+  for (const t of texts) {
+    for (const m of t.matchAll(/\b[A-Z][A-Za-z'-]{2,}(?:\s+(?:of\s+|and\s+)?[A-Z][A-Za-z'-]{2,}){0,3}\b/g)) {
+      const words = m[0].split(/\s+/).filter((w) => !NOT_ENTITIES.has(w.toLowerCase()));
+      const name = words.join(" ").toLowerCase();
+      if (name.length >= 4 && !NOT_ENTITIES.has(name)) counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([n]) => n);
+}
+
+/** The most repeated meaningful words in a title and headings. */
+export function topicsOf(texts: string[], limit = 12): string[] {
+  const counts = new Map<string, number>();
+  for (const t of texts) {
+    for (const w of t.toLowerCase().match(/[a-z]{4,}/g) ?? []) if (!STOPWORDS.has(w)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([w]) => w);
 }
 
 export interface CompetitorDeps {
@@ -86,7 +133,10 @@ function cleanDomain(raw: unknown, self: string): string | null {
 
 /** Plain-language gaps between the site and its competitors, worked out from the measured scores. */
 export function computeGaps(
-  site: { technical: number | null; geo: number | null; platforms: Platform[]; failures?: { id: string; title: string }[] },
+  site: {
+    technical: number | null; geo: number | null; platforms: Platform[]; failures?: { id: string; title: string }[];
+    schemaTypes?: string[]; words?: number; topics?: string[]; entities?: string[]; sitemapUrls?: number;
+  },
   rows: CompetitorRow[],
 ): string[] {
   const gaps: string[] = [];
@@ -124,6 +174,52 @@ export function computeGaps(
       const label = LABELS[f.id.replace(/^[a-z]+:/, "")] ?? f.title;
       gaps.push(`${count} of ${measured.length} competitors pass this check and you do not: ${label}.`);
     }
+  }
+  // Structured data the competitors publish and the site does not, with who has it and what to add.
+  if (site.schemaTypes) {
+    const have = new Set(site.schemaTypes);
+    const byType = new Map<string, string[]>();
+    for (const r of rows) for (const t of new Set(r.schemaTypes)) if (SCHEMA_ADVICE[t]) byType.set(t, [...(byType.get(t) ?? []), r.domain]);
+    const half = Math.max(1, Math.ceil(rows.length / 2));
+    for (const [type, domains] of [...byType].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))) {
+      if (have.has(type) || domains.length < half) continue;
+      gaps.push(`${domains.join(", ")} publish${domains.length === 1 ? "es" : ""} ${type} structured data on the homepage and you do not. Add ${SCHEMA_ADVICE[type]}.`);
+    }
+  }
+  // Depth of the homepage copy, as a median so one very long page does not set the bar.
+  const widths = rows.map((r) => r.words).filter((w) => w > 0).sort((a, b) => a - b);
+  if (site.words !== undefined && site.words > 0 && widths.length > 0) {
+    const mid = Math.floor(widths.length / 2);
+    const median = widths.length % 2 === 1 ? widths[mid]! : Math.round((widths[mid - 1]! + widths[mid]!) / 2);
+    if (median >= site.words * 1.5) gaps.push(`Competitor homepages carry a median of ${median} words against your ${site.words}, so they cover their topics in more depth.`);
+  }
+  // Topics most rivals put in their headings and the site does not.
+  if (site.topics && rows.some((r) => r.topics.length > 0)) {
+    const mine = new Set(site.topics);
+    const counts = new Map<string, number>();
+    for (const r of rows) for (const t of new Set(r.topics)) counts.set(t, (counts.get(t) ?? 0) + 1);
+    const half = Math.max(2, Math.ceil(rows.length / 2));
+    const missing = [...counts].filter(([t, n]) => n >= half && !mine.has(t)).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([t]) => t);
+    if (missing.length > 0) gaps.push(`Competitors' headings repeatedly cover ${missing.join(", ")}; yours do not mention ${missing.length === 1 ? "it" : "them"}.`);
+  }
+  // Named places, brands and people: how many of the site's also appear on rival pages, and which ones rivals repeat.
+  if (site.entities && site.entities.length > 0 && rows.some((r) => r.entities.length > 0)) {
+    const mine = new Set(site.entities);
+    const theirs = new Set(rows.flatMap((r) => r.entities));
+    const shared = site.entities.filter((e) => theirs.has(e)).length;
+    gaps.push(`${shared} of ${site.entities.length} of the places, brands and names you mention also appear on competitor pages.`);
+    const counts = new Map<string, number>();
+    for (const r of rows) for (const e of new Set(r.entities)) counts.set(e, (counts.get(e) ?? 0) + 1);
+    const half = Math.max(2, Math.ceil(rows.length / 2));
+    const missing = [...counts].filter(([e, n]) => n >= half && !mine.has(e)).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 5).map(([e]) => e);
+    if (missing.length > 0) gaps.push(`Competitors repeatedly name these entities, which you do not: ${missing.join(", ")}.`);
+  }
+  // Breadth of the site as the sitemap shows it, as a median.
+  const sizes = rows.map((r) => r.sitemapUrls).filter((n) => n > 0).sort((a, b) => a - b);
+  if (site.sitemapUrls !== undefined && site.sitemapUrls > 0 && sizes.length > 0) {
+    const mid = Math.floor(sizes.length / 2);
+    const median = sizes.length % 2 === 1 ? sizes[mid]! : Math.round((sizes[mid - 1]! + sizes[mid]!) / 2);
+    if (median >= site.sitemapUrls * 1.5) gaps.push(`Competitors list a median of ${median} pages in their sitemaps against your ${site.sitemapUrls}.`);
   }
   return gaps.length > 0 ? gaps : ["No clear gaps against these competitors."];
 }
@@ -192,6 +288,7 @@ export async function findCompetitors(
       // How the rival presents itself, as plain text cut short: it comes from their site, not ours.
       const home = cheerio.load(snapshot.home.body);
       const oneLine = (s: string, max: number) => s.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+      const analysis = analysePage(snapshot.home.finalUrl, snapshot.home.body);
       rows.push({
         domain: snapshot.domain,
         url: snapshot.home.finalUrl,
@@ -202,6 +299,11 @@ export async function findCompetitors(
         technical: buildModuleResult("technical", technical).score,
         geo: buildModuleResult("geo", geo).score,
         platforms: [...new Set(profiles.map((l) => l.platform))],
+        schemaTypes: analysis.schemaTypes.slice(0, 20),
+        words: analysis.words,
+        topics: topicsOf([oneLine(home("head > title").first().text(), 200), ...home("h1, h2").map((_, el) => oneLine(home(el).text(), 120)).get()]),
+        entities: entitiesOf([...home("h1, h2, h3").map((_, el) => oneLine(home(el).text(), 160)).get(), ...analysis.paragraphs.slice(0, 6).map((p) => oneLine(p, 400))]),
+        sitemapUrls: snapshot.sitemapXml ? sitemapLocations(snapshot.sitemapXml).length : 0,
         passed: [
           ...technical.filter((o) => o.passed).map((o) => `technical:${o.id}`),
           ...geo.filter((o) => o.passed).map((o) => `geo:${o.id}`),

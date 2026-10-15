@@ -3,6 +3,8 @@ import type { CheckOutcome, ModuleName } from "@/lib/pipeline/schemas";
 import { MODULE_WEIGHTS } from "@/lib/scoring";
 import { runTechnicalChecks } from "@/lib/checks/technical";
 import { runGeoChecks } from "@/lib/checks/geo";
+import { CRAWL_WEIGHTS } from "@/lib/checks/crawl";
+import { CITATION_WEIGHTS } from "@/lib/checks/citation";
 import { RUBRIC, runContentChecks } from "@/lib/checks/content";
 import { MARKETING_RUBRIC, runMarketingChecks } from "@/lib/checks/marketing";
 import { runPerformanceChecks } from "@/lib/checks/performance";
@@ -85,6 +87,24 @@ export const LABELS: Record<string, string> = {
   "has-profiles": "Links two or more social profiles", "profile-links-valid": "No placeholder links to a platform's front page",
   "key-platforms": "Links Facebook, Instagram or LinkedIn", "schema-sameas": "Lists the profiles in the Organization sameAs field",
   "profiles-reachable": "Every linked profile exists", "profile-activity": "A linked profile posted in the last six months",
+  // Crawlability and rendering
+  "canonical-consistency": "Every page's canonical points to the page itself (or to a real duplicate)",
+  "orphan-pages": "Every page in the sitemap is linked from a page that was read (only when the crawl was not capped)",
+  "internal-redirects": "Internal links point straight at the final address, not through a redirect",
+  "render-links": "The HTML holds the internal links a browser shows (only when a browser render ran)",
+  "render-schema": "Structured data is in the HTML, not only added by JavaScript (only when a browser render ran)",
+  "render-headings": "The main heading is in the HTML, not only added by JavaScript (only when a browser render ran)",
+  "render-hydration": "The page hydrates without errors, so the server HTML matches what the browser builds (only when a browser render ran)",
+  // AI citation potential
+  "entity-early": "The first paragraph names the business",
+  definition: "An opening sentence says plainly what the business does",
+  "answer-passage": "Has a self-contained passage of about 134 to 167 words (a 40 to 200 word paragraph earns half)",
+  facts: "States at least three concrete figures an AI can quote",
+  structure: "No paragraph runs over 200 words, and long pages have subheadings",
+  clarity: "Few unsupported superlatives, and acronyms are spelled out",
+  "schema-fit": "Content that calls for FAQPage, Article or Product has that structured data",
+  authority: "Article pages of 300 words or more link to at least two outside sources",
+  "external-authority": "The domain has a link-based rank of 3 or more, a Wikidata entry, or is discussed on Hacker News (score only, when measured)",
 };
 
 const SOURCES: Record<ModuleRubric["module"], string> = {
@@ -93,11 +113,14 @@ const SOURCES: Record<ModuleRubric["module"], string> = {
   content: "Fixed checks on the page text (80 points), plus a small AI review (20 points). The AI's answers only count when they quote a specific passage that is really on the page.",
   marketing: "Fixed checks on the page's own HTML (70 points): measurement tags, lead capture, a visible offer, a content hub, review markup, risk reversal, specific proof and contact channels. Plus a messaging review by AI (30 points) whose answers only count when they quote a specific passage that is really on the page.",
   performance: "Google PageSpeed Insights, one mobile lab run. Needs a free API key. Each vital earns full marks when good, half in Google's needs-improvement band and none when poor; the overall speed score earns its share in proportion.",
+  citation: "Fixed rules over the HTML of every page read: whether the first paragraph names the business and says what it does, whether a passage of about 134 to 167 words can be lifted whole, concrete figures, structure, vague claims, matching structured data, outside sources, and (when a free key or a public lookup answered) the site's rank, Wikidata entry and Hacker News mentions, which cost score but never raise a finding. Each page also gets its own score. A separate AI answer-extraction simulation is shown beside the report, and only with a quote from the page. It is never scored. No AI sets any of these points.",
+  crawl: "How the pages that were read fit together: canonicals across pages, sitemap pages that nothing links to, internal redirects, and (when the browser step ran) whether the links, headings and structured data a browser shows are already in the HTML a bot is served. Rules only, no AI.",
   social: "Social links found on the homepage, then each public profile page read without logging in. Pages that need a login are reported as unchecked. When a public page states its audience in the description it shows to anyone (for example Facebook's \"621,509 followers\"), that count is shown. Instagram business and creator accounts are read through Meta's official API when the server owner has connected one, which adds their follower count and latest post.",
 };
 
 const LABEL: Record<ModuleRubric["module"], string> = {
   technical: "SEO", geo: "AI visibility", content: "Content and conversion", marketing: "Marketing", performance: "Speed", social: "Social media",
+  citation: "AI citation potential", crawl: "Crawlability and rendering",
 };
 
 const blank = (body = "<html><head></head><body></body></html>"): SiteSnapshot => ({
@@ -135,6 +158,8 @@ export async function rubricTable(): Promise<ModuleRubric[]> {
   const modules: [ModuleRubric["module"], RubricCheck[]][] = [
     ["technical", toChecks(runTechnicalChecks(blank()))],
     ["geo", toChecks(runGeoChecks(blank()))],
+    ["crawl", Object.entries(CRAWL_WEIGHTS).map(([id, weight]) => ({ id, weight, label: LABELS[id] ?? "" }))],
+    ["citation", Object.entries(CITATION_WEIGHTS).map(([id, weight]) => ({ id, weight, label: LABELS[id] ?? "" }))],
     ["content", [...toChecks(content.outcomes), ...RUBRIC.map((r) => ({ id: r.id, weight: 5, label: LABELS[r.id] ?? "", ai: true }))]],
     ["marketing", [...toChecks(marketing.outcomes), ...MARKETING_RUBRIC.map((r) => ({ id: r.id, weight: 5, label: LABELS[r.id] ?? "", ai: true }))]],
     ["performance", toChecks(performance.outcomes)],

@@ -101,7 +101,7 @@ describe("findCompetitors", () => {
 
 describe("computeGaps", () => {
   const row = (domain: string, technical: number, geo: number, platforms: ("facebook" | "instagram" | "linkedin")[]) =>
-    ({ domain, url: `https://${domain}/`, source: "ai" as const, technical, geo, platforms, title: "", headline: "", description: "", passed: [] as string[] });
+    ({ domain, url: `https://${domain}/`, source: "ai" as const, technical, geo, platforms, title: "", headline: "", description: "", passed: [] as string[], schemaTypes: [] as string[], words: 0, topics: [] as string[], entities: [] as string[], sitemapUrls: 0 });
 
   it("reports score gaps of 10 points or more and platforms most competitors have", () => {
     const gaps = computeGaps({ technical: 50, geo: 40, platforms: ["facebook"] }, [row("a.example", 70, 45, ["facebook", "instagram"]), row("b.example", 55, 60, ["instagram"])]);

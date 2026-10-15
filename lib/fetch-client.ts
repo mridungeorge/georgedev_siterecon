@@ -15,7 +15,22 @@ const ProfileReadSchema = z.object({
 });
 
 const RenderSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("ok"), words: z.number().int().min(0), mobileOverflow: z.boolean(), screenshot: z.string().optional() }),
+  z.object({
+    status: z.literal("ok"),
+    words: z.number().int().min(0),
+    mobileOverflow: z.boolean(),
+    screenshot: z.string().optional(),
+    // Added later: an older service does not send these.
+    h1: z.number().int().min(0).optional(),
+    links: z.number().int().min(0).optional(),
+    jsonLd: z.number().int().min(0).optional(),
+    titleChars: z.number().int().min(0).optional(),
+    lcpMs: z.number().int().min(0).optional(),
+    clsMilli: z.number().int().min(0).optional(),
+    inpMs: z.number().int().min(0).optional(),
+    hydrationErrors: z.number().int().min(0).optional(),
+    lcpTag: z.string().max(20).optional(),
+  }),
   z.object({ status: z.literal("skipped"), reason: z.string() }),
 ]);
 export type RenderResult = z.infer<typeof RenderSchema>;

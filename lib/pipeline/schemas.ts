@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { TelemetrySchema } from "@/lib/telemetry";
 
-export const ModuleNameSchema = z.enum(["technical", "geo", "content", "marketing", "social", "competitors", "performance"]);
+export const ModuleNameSchema = z.enum(["technical", "geo", "content", "marketing", "social", "competitors", "performance", "citation", "crawl"]);
 export const SeveritySchema = z.enum(["critical", "high", "medium", "low"]);
 export const EffortSchema = z.enum(["low", "medium", "high"]);
 
@@ -71,6 +72,16 @@ export const CompetitorRowSchema = z.object({
   description: z.string().default(""),
   /** Ids of the SEO and AI-visibility checks this competitor passes. Reports stored before this existed have none. */
   passed: z.array(z.string()).default([]),
+  /** schema.org types on the competitor's homepage. Reports stored before this existed have none. */
+  schemaTypes: z.array(z.string()).default([]),
+  /** Words of visible text on the homepage. */
+  words: z.number().int().min(0).default(0),
+  /** The most repeated meaningful words in its title and headings. */
+  topics: z.array(z.string()).default([]),
+  /** Named places, brands and people on the homepage, lower case. */
+  entities: z.array(z.string()).default([]),
+  /** Pages its sitemap lists. 0 when it has none. */
+  sitemapUrls: z.number().int().min(0).default(0),
 });
 export type CompetitorRow = z.infer<typeof CompetitorRowSchema>;
 
@@ -131,6 +142,71 @@ export const FixKitItemSchema = z.object({
 });
 export type FixKitItem = z.infer<typeof FixKitItemSchema>;
 
+const ReadinessComponentSchema = z.object({
+  id: z.enum(["crawler-access", "structured-data", "answer-blocks", "entity-clarity", "render-parity", "freshness"]),
+  label: z.string(),
+  weight: z.number(),
+  score: z.number().min(0).max(100).nullable(),
+  passed: z.array(z.string()),
+  failed: z.array(z.string()),
+});
+
+/** The AI Readiness Score: a lens over the checks that ran, with the check ids behind each component. */
+export const AiReadinessSchema = z.object({
+  score: z.number().min(0).max(100),
+  band: z.enum(["Strong", "Moderate", "Weak", "Very weak"]),
+  verdict: z.string(),
+  components: z.array(ReadinessComponentSchema),
+});
+
+/** Detail behind the crawl, citation and speed modules: shown in the report, never part of a score. */
+export const InsightsSchema = z.object({
+  vitals: z.object({
+    source: z.enum(["pagespeed", "browser"]).default("pagespeed"),
+    lcp: z.object({ ms: z.number(), element: z.string().nullable(), resource: z.string().nullable() }),
+    cls: z.object({ value: z.number(), shifts: z.array(z.object({ selector: z.string(), score: z.number() })) }),
+    inp: z.object({ ms: z.number(), rating: z.enum(["good", "needs improvement", "poor"]), source: z.enum(["field", "lab"]).default("field") }).nullable(),
+    blockers: z.array(z.object({ url: z.string(), wastedMs: z.number() })),
+    heavyScripts: z.array(z.object({ url: z.string(), ms: z.number() })),
+  }).nullable().default(null),
+  crawl: z.object({
+    statusClasses: z.object({ ok: z.number(), redirected: z.number(), clientError: z.number(), serverError: z.number(), unreachable: z.number().default(0) }),
+    sitemapUrls: z.number().nullable(),
+    coverage: z.object({ sitemapUrls: z.number(), fetched: z.number(), complete: z.boolean() }).nullable().default(null),
+    orphanCheck: z.enum(["ran", "incomplete", "no-sitemap"]).default("no-sitemap"),
+    renderDiff: z.array(z.object({ label: z.string(), raw: z.number(), rendered: z.number() })),
+  }).nullable().default(null),
+  citation: z.object({
+    pages: z.array(z.object({
+      url: z.string(),
+      score: z.number().nullable(),
+      criteria: z.record(z.string(), z.enum(["pass", "partial", "fail", "n/a"])),
+    })),
+    extractable: z.object({
+      entity: z.string().nullable(),
+      definition: z.string().nullable(),
+      facts: z.array(z.string()),
+      questions: z.array(z.object({ q: z.string(), a: z.string() })),
+    }),
+    /** Outside signals of authority, when any were read. */
+    authority: z.object({
+      domainRank: z.number().nullable(),
+      wikidata: z.boolean().nullable(),
+      hackerNews: z.number().nullable(),
+    }).nullable().default(null),
+    /** What a model could lift, each answer backed by a quote from the page. Empty without an AI service. */
+    aiExtraction: z.array(z.object({ id: z.string(), label: z.string(), kind: z.enum(["fact", "keyword"]).default("fact"), extractable: z.boolean(), quote: z.string() })).default([]),
+  }).nullable().default(null),
+  schemaGaps: z.array(z.object({
+    url: z.string(),
+    type: z.enum(["FAQPage", "Article", "Product"]),
+    reason: z.string(),
+    snippet: z.record(z.string(), z.unknown()),
+    note: z.string(),
+  })).default([]),
+});
+export type Insights = z.infer<typeof InsightsSchema>;
+
 export const ReportSchema = z.object({
   id: z.string(),
   url: z.string(),
@@ -152,6 +228,10 @@ export const ReportSchema = z.object({
   fixKit: z.array(FixKitItemSchema).default([]),
   /** One row per page read, homepage first. Reports stored before this existed have none. */
   pageTable: z.array(PageRowSchema).default([]),
+  /** Reports stored before these existed have neither. */
+  aiReadiness: AiReadinessSchema.nullable().default(null),
+  telemetry: TelemetrySchema.nullable().default(null),
+  insights: InsightsSchema.nullable().default(null),
 });
 
 export type ModuleName = z.infer<typeof ModuleNameSchema>;
@@ -170,5 +250,7 @@ export interface CheckOutcome {
   passed: boolean;
   /** For a failed check on a measured value: the share of the weight still earned, from 0 to 1. */
   credit?: number;
+  /** For a passed AI answer: the passage of the page the model quoted. */
+  quote?: string;
   finding?: Finding;
 }

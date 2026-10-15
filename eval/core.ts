@@ -23,7 +23,7 @@ export interface Scorecard {
   failures: string[];
 }
 
-const CHECKED = new Set(["technical", "geo", "content", "marketing", "social"]);
+const CHECKED = new Set(["technical", "geo", "content", "marketing", "social", "crawl", "citation"]);
 
 export function fixtureFetcher(fixture: Fixture, name: string): PageFetcher {
   return async (url): Promise<SafeResponse> => {

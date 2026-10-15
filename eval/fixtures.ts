@@ -143,6 +143,35 @@ export const FIXTURES: Record<string, Fixture> = {
   "schema-incomplete": healthy("schema-incomplete", {
     html: HEALTHY_HTML.replace(/"name":"Sunrise Bakery","address":\{[^}]*\},/, '"name":"[Business Name]",'),
   }),
+  // ---- Crawlability and citation potential: one problem each ----
+  // An inner page whose canonical points at the homepage asks to be treated as a copy of it.
+  "canonical-to-home": healthy("canonical-to-home", {
+    files: { "/about": page(INNER_PAGES["/about"]!.body.replace("</head>", '<link rel="canonical" href="https://canonical-to-home.test/"></head>'), { ...HSTS, ...FRESH, ...SECURITY }) },
+  }),
+  // Three questions answered on the page, with no FAQPage markup.
+  "faq-no-schema": healthy("faq-no-schema", {
+    html: HEALTHY_HTML.replace(
+      "<h2>How do I order a custom cake?</h2>",
+      "<h2>Do you bake gluten free bread?</h2><p>Yes, we bake a gluten free loaf every Saturday morning in a separate tin, and it can be reserved online or by phone until Friday at noon each week.</p>" +
+        "<h2>Can I change an order after I place it?</h2><p>You can change any order up to two days before pickup by replying to the confirmation email or calling the shop, and we will confirm the change the same day.</p>" +
+        "<h2>How do I order a custom cake?</h2>",
+    ),
+  }),
+  // One long paragraph, with no break, that an AI would have to cut to quote.
+  "wall-of-text": healthy("wall-of-text", {
+    html: HEALTHY_HTML.replace(
+      "<h2>How do I order a custom cake?</h2>",
+      `<p>${Array.from({ length: 11 }, () => "We bake bread every morning with flour from two local farms and a starter that is ten years old, then we sell it fresh to people in the neighbourhood.").join(" ")}</p><h2>How do I order a custom cake?</h2>`,
+    ),
+  }),
+  // Sweeping claims with no figure to back them.
+  "vague-claims": healthy("vague-claims", {
+    html: HEALTHY_HTML.replace(OFFER, `${OFFER}<p>We are the best, a world-class and innovative bakery with cutting-edge, unique and premier service.</p>`),
+  }),
+  // The opening paragraph never says the business name.
+  "no-entity-opening": healthy("no-entity-opening", {
+    html: HEALTHY_HTML.replace("<p>Sunrise Bakery is a family run bakery in Melbourne that bakes", "<p>We are a family run bakery in Melbourne that bakes"),
+  }),
   "bad-canonical": healthy("bad-canonical", { html: HEALTHY_HTML.replace('<link rel="canonical" href="https://healthy-bakery.test/">', '<link rel="canonical" href="https://other-site.test/">') }),
   "broken-link": healthy("broken-link", { html: HEALTHY_HTML.replace('<a href="/order">Order online</a>', '<a href="/order">Order online</a><a href="/old-offer">Winter offer</a>') }),
   // An inner page that copies the homepage's title and description, has two H1s and almost no text.

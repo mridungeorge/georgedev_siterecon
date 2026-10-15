@@ -83,7 +83,8 @@ export const TRUTH: Record<string, Truth> = {
   "www-duplicate": { expect: ["technical:host-redirect"], exact: true },
   "soft-404": { expect: ["technical:soft-404"], exact: true },
   "hreflang-broken": { expect: ["technical:hreflang-valid"], exact: true },
-  "article-no-author": { expect: ["technical:article-authorship"], absent: ["technical:schema-complete"], exact: true },
+  // An article that names no author also cites no outside source.
+  "article-no-author": { expect: ["technical:article-authorship", "citation:authority"], absent: ["technical:schema-complete"], exact: true },
   "unanswered-question": { expect: ["geo:question-answers"], absent: ["geo:question-headings"], exact: true },
   "no-analytics": { expect: ["marketing:analytics"], exact: true },
   "no-lead-capture": { expect: ["marketing:lead-capture"], exact: true },
@@ -91,12 +92,21 @@ export const TRUTH: Record<string, Truth> = {
   "no-content-hub": { expect: ["marketing:content-hub"], exact: true },
   "no-review-markup": { expect: ["marketing:reviews-markup"], exact: true },
   "no-guarantee": { expect: ["marketing:risk-reversal"], exact: true },
-  "vague-proof": { expect: ["marketing:specific-proof"], absent: ["content:trust-signals"], exact: true },
+  // With the figures taken out, the homepage also has nothing concrete an AI could quote.
+  "vague-proof": { expect: ["marketing:specific-proof", "citation:facts"], absent: ["content:trust-signals"], exact: true },
   "one-contact-route": { expect: ["marketing:contact-channels", "content:contact-info"], exact: true },
-  "no-trust-pages": { expect: ["content:about-page", "content:policy-pages"], absent: ["content:navigation"], exact: true },
+  // The About page is in the sitemap but nothing links to it any more.
+  "no-trust-pages": { expect: ["content:about-page", "content:policy-pages", "crawl:orphan-pages"], absent: ["content:navigation"], exact: true },
   "stale-copyright": { expect: ["content:copyright-year"], exact: true },
   "thin-homepage": { expect: ["content:content-depth"], absent: ["geo:content-in-html"], exact: true },
   "hard-to-read": { expect: ["content:readability"], absent: ["content:content-depth"], exact: true },
+
+  // Crawlability and citation potential: one problem each, on the otherwise healthy site.
+  "canonical-to-home": { expect: ["crawl:canonical-consistency"], absent: ["technical:canonical-valid"], exact: true },
+  "faq-no-schema": { expect: ["citation:schema-fit"], absent: ["geo:question-headings"], exact: true },
+  "wall-of-text": { expect: ["citation:structure"], absent: ["geo:citable-passage"], exact: true },
+  "vague-claims": { expect: ["citation:clarity"], exact: true },
+  "no-entity-opening": { expect: ["citation:entity-early"], absent: ["citation:definition"], exact: true },
 
   "blocked-by-robots": { expect: [], error: "BlockedByRobotsError" },
   "bot-challenge": { expect: [], error: "TargetUnreachableError" },

@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from .netguard import Resolver, UnsafeUrlError, check_public_url
-from .render import make_subprocess_renderer, read_available_mb
+from .render import RenderError, keep_known, make_subprocess_renderer, read_available_mb
 from .routing import url_matches_platform
 from .settings import Settings
 from .social import YoutubeExtract, read_profile, ytdlp_extract
@@ -77,11 +77,17 @@ def create_app(
             return {"status": "skipped", "reason": "another render is already running"}
         try:
             measured = render_page(body.url)
-            return {"status": "ok", "words": int(measured["words"]), "mobileOverflow": bool(measured["mobileOverflow"])}
+            extra: dict = {}
+            keep_known(measured, extra)
+            return {"status": "ok", "words": int(measured["words"]), "mobileOverflow": bool(measured["mobileOverflow"]), **extra}
         except Exception as exc:
             # The caller gets a generic reason. The cause goes to the server log, with the host only
             # (a URL can carry a query string that should not be written down).
             log.warning("render of %s failed: %s %s", urlsplit(body.url).hostname, type(exc).__name__, getattr(exc, "detail", "") or exc)
+            # A timeout is the one failure worth naming: it tells the visitor the page itself was slow, which
+            # is a finding in its own right. Every other cause stays generic, so no internal detail leaks.
+            if isinstance(exc, RenderError) and "took too long" in str(exc):
+                return {"status": "skipped", "reason": "the page took too long to load in the browser, so it was stopped"}
             return {"status": "skipped", "reason": "the browser could not render the page"}
         finally:
             one_render_at_a_time.release()

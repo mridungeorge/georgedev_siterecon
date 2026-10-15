@@ -50,6 +50,9 @@ export async function logScanRun(opts: MlflowOptions, report: Report, durationMs
     };
     if (report.overallScore !== null) metrics.overall_score = report.overallScore;
     for (const m of report.modules) if (m.score !== null) metrics[`score_${m.module}`] = m.score;
+    if (report.aiReadiness) metrics.ai_readiness = report.aiReadiness.score;
+    // Per-step timings, so a slow provider shows up as a trend and not as one long scan.
+    for (const st of report.telemetry?.steps ?? []) metrics[`step_ms_${st.step}`] = st.ms;
 
     await post("runs/log-batch", {
       run_id: runId,
