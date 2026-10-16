@@ -92,4 +92,12 @@ describe("script attribution", () => {
     const f = r.outcomes.find((o) => o.id === "tbt")!.finding!;
     expect(f.evidence.map((e) => e.url)).not.toContain("Unattributable");
   });
+
+  it("leaves the page's own address out of the heaviest scripts", async () => {
+    const data = JSON.parse(JSON.stringify(DETAILED));
+    data.lighthouseResult.audits["bootup-time"].details.items.push({ url: "https://example.com/", total: 2000, scripting: 1500 });
+    const r = await runPerformanceChecks("https://example.com/", { apiKey: "k", quotaOk: () => true, fetchJson: async () => data });
+    expect(r.vitals!.heavyScripts.map((h) => h.url)).not.toContain("https://example.com/");
+    expect(r.vitals!.heavyScripts[0]!.url).toBe("https://cdn.example.net/tracker.js");
+  });
 });

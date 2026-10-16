@@ -69,7 +69,7 @@ function FindingCard({ f, open }: { f: Finding; open?: boolean }) {
 /** One honest sentence about how much of the sitemap the crawl covered, and why when it was not all of it. */
 function coverageText(c: NonNullable<NonNullable<Report["insights"]>["crawl"]>["coverage"] & object): string {
   const kids = c.childSitemaps;
-  const base = `${c.sitemapUrls} pages in the sitemap, ${c.fetched} fetched beyond the ones read first.`;
+  const base = `${c.sitemapUrls.toLocaleString("en-US")} pages in the sitemap, ${c.fetched} fetched beyond the ones read first.`;
   if (c.complete) return base;
   if (kids && kids.read < kids.listed) return `${base} It lists ${kids.listed} child sitemaps and only ${kids.read} could be read, so counts cover only part of the site.`;
   return `${base} The sitemap is larger than the crawl limit, so counts cover only part of it.`;
