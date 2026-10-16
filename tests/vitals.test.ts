@@ -82,3 +82,14 @@ describe("Core Web Vitals mapped to elements and files", () => {
     }
   });
 });
+
+describe("script attribution", () => {
+  it("leaves out work PageSpeed could not attribute to an address", async () => {
+    const data = JSON.parse(JSON.stringify(DETAILED));
+    data.lighthouseResult.audits["bootup-time"].details.items.push({ url: "Unattributable", total: 1200, scripting: 1000 });
+    const r = await runPerformanceChecks("https://example.com/", { apiKey: "k", quotaOk: () => true, fetchJson: async () => data });
+    expect(r.vitals!.heavyScripts.map((h) => h.url)).not.toContain("Unattributable");
+    const f = r.outcomes.find((o) => o.id === "tbt")!.finding!;
+    expect(f.evidence.map((e) => e.url)).not.toContain("Unattributable");
+  });
+});

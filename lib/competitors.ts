@@ -72,10 +72,17 @@ const NOT_ENTITIES = new Set(["the", "our", "we", "your", "you", "welcome", "hom
 export function entitiesOf(texts: string[], limit = 12): string[] {
   const counts = new Map<string, number>();
   for (const t of texts) {
-    for (const m of t.matchAll(/\b[A-Z][A-Za-z'-]{2,}(?:\s+(?:of\s+|and\s+)?[A-Z][A-Za-z'-]{2,}){0,3}\b/g)) {
-      const words = m[0].split(/\s+/).filter((w) => !NOT_ENTITIES.has(w.toLowerCase()));
-      const name = words.join(" ").toLowerCase();
-      if (name.length >= 4 && !NOT_ENTITIES.has(name)) counts.set(name, (counts.get(name) ?? 0) + 1);
+    // The first word of a sentence is capitalised whatever it is, so it says nothing: only a capital in
+    // the middle of a sentence marks a name.
+    for (const sentence of t.split(/(?<=[.!?])\s+/)) {
+      // "Stackers Australia is a family company" opens with a name. "Make laundry day simple" does not.
+      const opensWithName = /^[A-Z][A-Za-z'-]{2,}\s+[A-Z][A-Za-z'-]{2,}/.test(sentence);
+      const rest = opensWithName ? sentence : sentence.replace(/^\S+\s*/, "");
+      for (const m of rest.matchAll(/\b[A-Z][A-Za-z'-]{2,}(?:\s+(?:of\s+)?[A-Z][A-Za-z'-]{2,}){0,3}\b/g)) {
+        const words = m[0].split(/\s+/).filter((w) => !NOT_ENTITIES.has(w.toLowerCase()));
+        const name = words.join(" ").toLowerCase();
+        if (name.length >= 4 && !NOT_ENTITIES.has(name)) counts.set(name, (counts.get(name) ?? 0) + 1);
+      }
     }
   }
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([n]) => n);
@@ -203,7 +210,7 @@ export function computeGaps(
     if (missing.length > 0) gaps.push(`Competitors' headings repeatedly cover ${missing.join(", ")}; yours do not mention ${missing.length === 1 ? "it" : "them"}.`);
   }
   // Named places, brands and people: how many of the site's also appear on rival pages, and which ones rivals repeat.
-  if (site.entities && site.entities.length > 0 && rows.some((r) => r.entities.length > 0)) {
+  if (site.entities && site.entities.length >= 3 && rows.some((r) => r.entities.length > 0)) {
     const mine = new Set(site.entities);
     const theirs = new Set(rows.flatMap((r) => r.entities));
     const shared = site.entities.filter((e) => theirs.has(e)).length;
@@ -302,7 +309,7 @@ export async function findCompetitors(
         schemaTypes: analysis.schemaTypes.slice(0, 20),
         words: analysis.words,
         topics: topicsOf([oneLine(home("head > title").first().text(), 200), ...home("h1, h2").map((_, el) => oneLine(home(el).text(), 120)).get()]),
-        entities: entitiesOf([...home("h1, h2, h3").map((_, el) => oneLine(home(el).text(), 160)).get(), ...analysis.paragraphs.slice(0, 6).map((p) => oneLine(p, 400))]),
+        entities: entitiesOf(analysis.paragraphs.slice(0, 8).map((p) => oneLine(p, 500))),
         sitemapUrls: snapshot.sitemapXml ? sitemapLocations(snapshot.sitemapXml).length : 0,
         passed: [
           ...technical.filter((o) => o.passed).map((o) => `technical:${o.id}`),

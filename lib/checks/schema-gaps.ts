@@ -92,9 +92,11 @@ function fitForPage(a: PageAnalysis, entity: string | null, isHome: boolean): Pa
     });
   }
 
-  const price = /[$€£]\s?\d/.test($("body").text());
-  const buy = /\b(add to (cart|basket|bag)|buy now|add to trolley)\b/i.test($("body").text()) || $("button, input[type=submit]").toArray().some((el) => /add to (cart|basket|bag)|buy now/i.test($(el).text() + ($(el).attr("value") ?? "")));
-  const isProduct = !isHome && price && buy && Boolean(a.h1);
+  // One product page has one main price (perhaps a "was" price) and one buy button. A page with many
+  // prices or many buy buttons is a listing, which is a CollectionPage, not a Product.
+  const prices = new Set($("body").text().match(/[$€£]\s?\d[\d,]*(?:\.\d+)?/g) ?? []);
+  const buyButtons = $("button, input[type=submit], a").toArray().filter((el) => /add to (cart|basket|bag|trolley)|buy now/i.test($(el).text() + ($(el).attr("value") ?? ""))).length;
+  const isProduct = !isHome && prices.size >= 1 && prices.size <= 4 && buyButtons >= 1 && buyButtons <= 2 && Boolean(a.h1);
   if (isProduct) detected.push("Product");
   if (isProduct && !has("Product")) {
     const snippet: Record<string, unknown> = { "@context": "https://schema.org", "@type": "Product", name: clip(a.h1, 150) };

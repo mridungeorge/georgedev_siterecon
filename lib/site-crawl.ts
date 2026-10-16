@@ -20,6 +20,8 @@ export interface CrawlCoverage {
 }
 
 export interface SitemapCrawl {
+  /** Every page address the sitemap (or its child sitemaps) lists on the site's own host. */
+  urls: string[];
   pages: SafeResponse[];
   /** What each fetched address answered, including failures (status 0) and non-HTML files. */
   statuses: { url: string; status: number }[];
@@ -39,21 +41,52 @@ export function sitemapLocations(xml: string): string[] {
   return [...xml.matchAll(/<loc>\s*([^<\s][^<]*?)\s*<\/loc>/gi)].map((m) => m[1]!);
 }
 
+/** True for a sitemap index: a list of other sitemaps, not of pages. */
+export const isSitemapIndex = (xml: string): boolean => /<sitemapindex[\s>]/i.test(xml);
+
 export async function crawlSitemapPages(
   s: SiteSnapshot,
   fetchPage: PageFetcher,
-  opts: { limit?: number; concurrency?: number; signal?: AbortSignal } = {},
+  opts: { limit?: number; concurrency?: number; maxChildSitemaps?: number; signal?: AbortSignal } = {},
 ): Promise<SitemapCrawl> {
-  const { limit = 40, concurrency = 4, signal } = opts;
-  const empty: SitemapCrawl = { pages: [], statuses: [], coverage: { sitemapUrls: 0, fetched: 0, complete: false } };
+  const { limit = 40, concurrency = 4, maxChildSitemaps = 5, signal } = opts;
+  const empty: SitemapCrawl = { urls: [], pages: [], statuses: [], coverage: { sitemapUrls: 0, fetched: 0, complete: false } };
   if (!s.sitemapXml) return empty;
 
   const home = key(s.home.finalUrl)?.split("/")[0];
   const read = new Set([s.home, ...s.pages].flatMap((r) => [key(r.url), key(r.finalUrl)]).filter((k): k is string => k !== null));
 
+  // A sitemap index lists other sitemaps. Read a few of them on the same host, and say so when there
+  // were more than that or one could not be read, because the page list is then partial.
+  let locations = sitemapLocations(s.sitemapXml);
+  let childrenIncomplete = false;
+  if (isSitemapIndex(s.sitemapXml)) {
+    const children = locations.filter((loc) => {
+      try {
+        const u = new URL(loc);
+        return /^https?:$/.test(u.protocol) && key(loc)?.split("/")[0] === home && isAllowed(s.robots, USER_AGENT, u.pathname);
+      } catch {
+        return false;
+      }
+    });
+    childrenIncomplete = children.length > maxChildSitemaps || children.length < locations.length;
+    locations = [];
+    for (const child of children.slice(0, maxChildSitemaps)) {
+      if (signal?.aborted) throw new Error("The scan was cancelled.");
+      try {
+        const res = await fetchPage(child, signal);
+        if (res.status === 200 && /<(urlset|sitemapindex)[\s>]/i.test(res.body) && !isSitemapIndex(res.body)) locations.push(...sitemapLocations(res.body));
+        else childrenIncomplete = true;
+      } catch {
+        if (signal?.aborted) throw new Error("The scan was cancelled.");
+        childrenIncomplete = true;
+      }
+    }
+  }
+
   const seen = new Set<string>();
   const onSite: string[] = [];
-  for (const loc of sitemapLocations(s.sitemapXml)) {
+  for (const loc of locations) {
     let url: URL;
     try {
       url = new URL(loc);
@@ -91,8 +124,9 @@ export async function crawlSitemapPages(
   if (signal?.aborted) throw new Error("The scan was cancelled.");
 
   return {
+    urls: onSite,
     pages,
     statuses,
-    coverage: { sitemapUrls: onSite.length, fetched: batch.length, complete: todo.length <= limit },
+    coverage: { sitemapUrls: onSite.length, fetched: batch.length, complete: todo.length <= limit && !childrenIncomplete },
   };
 }

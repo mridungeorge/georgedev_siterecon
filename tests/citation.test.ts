@@ -132,3 +132,36 @@ describe("external authority", () => {
     expect(runCitationChecks(snap(HEALTHY), signals({ hackerNews: 5 })).outcomes.find((o) => o.id === "external-authority")!.passed).toBe(true);
   });
 });
+
+describe("listing pages are not articles or essays", () => {
+  const cards = (n: number) => Array.from({ length: n }, (_, i) => `<article class="card"><h3>Product ${i}</h3><span>$${10 + i}</span></article>`).join("");
+  const listing = (extra = "") =>
+    `<html><head><title>Sale | Shop</title></head><body><h1>SALE</h1>${cards(40)}${extra}<div>${"shop the range ".repeat(120)}</div></body></html>`;
+
+  it("does not ask a product grid to cite outside sources", () => {
+    const s = snap(HEALTHY);
+    s.pages = [page("https://example.com/sale/", listing())];
+    const r = runCitationChecks(s);
+    expect(r.insights.pages[1]!.criteria.authority).toBe("n/a");
+  });
+
+  it("does not call a product grid long unbroken text, because it has no prose", () => {
+    const s = snap(HEALTHY);
+    s.pages = [page("https://example.com/sale/", listing())];
+    expect(runCitationChecks(s).insights.pages[1]!.criteria.structure).not.toBe("fail");
+  });
+
+  it("still flags a long prose page with no subheadings", () => {
+    const prose = Array.from({ length: 5 }, () => `<p>${para(150)}</p>`).join("");
+    const s = snap(HEALTHY);
+    s.pages = [page("https://example.com/essay", `<html><head><title>Essay</title></head><body><h1>Essay</h1>${prose}</body></html>`)];
+    expect(runCitationChecks(s).insights.pages[1]!.criteria.structure).toBe("fail");
+  });
+
+  it("says plainly when a page has no paragraph elements at all", () => {
+    const s = snap(HEALTHY);
+    s.pages = [page("https://example.com/sale/", listing())];
+    const f = runCitationChecks(s).outcomes.find((o) => o.id === "answer-passage")?.finding;
+    if (f) expect(f.evidence.map((e) => e.note).join(" ")).not.toMatch(/0 words/);
+  });
+});

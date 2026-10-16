@@ -346,7 +346,7 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
         platforms: [...new Set((social?.profiles ?? []).filter((p) => p.kind === "profile").map((p) => p.platform))],
         schemaTypes: homeAnalysis.schemaTypes,
         words: homeAnalysis.words,
-        entities: entitiesOf([...cheerio.load(snapshot.home.body)("h1, h2, h3").map((_, el) => cheerio.load(snapshot.home.body)(el).text().replace(/\s+/g, " ").trim()).get(), ...homeAnalysis.paragraphs.slice(0, 6)]),
+        entities: entitiesOf(homeAnalysis.paragraphs.slice(0, 8).map((p) => p.slice(0, 500))),
         sitemapUrls: snapshot.sitemapXml ? sitemapLocations(snapshot.sitemapXml).length : 0,
         topics: topicsOf([$title(snapshot), ...cheerio.load(snapshot.home.body)("h1, h2").map((_, el) => cheerio.load(snapshot.home.body)(el).text().replace(/\s+/g, " ").trim()).get()]),
         // What the site fails in the two modules competitors are measured on, to compare check by check.

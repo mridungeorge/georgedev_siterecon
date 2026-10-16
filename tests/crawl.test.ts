@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runCrawlChecks } from "@/lib/checks/crawl";
 import { page, snap } from "./helpers/snap";
+import { sitemapLocations } from "@/lib/site-crawl";
 
 const home = (links: string[], extraHead = "") =>
   `<html><head><title>Acme</title>${extraHead}</head><body><h1>Acme</h1>${links.map((l) => `<a href="${l}">${l}</a>`).join("")}</body></html>`;
@@ -128,8 +129,9 @@ describe("determinism", () => {
 });
 
 describe("with the sitemap crawl", () => {
-  const crawled = (pages: ReturnType<typeof page>[], statuses: { url: string; status: number }[], complete = true) => ({
-    pages, statuses, coverage: { sitemapUrls: pages.length + 1, fetched: pages.length, complete },
+  // `urls` is what the sitemap crawl found listed, which is every location in the snapshot's sitemap.
+  const crawled = (s: ReturnType<typeof snap>, pages: ReturnType<typeof page>[], statuses: { url: string; status: number }[], complete = true) => ({
+    urls: sitemapLocations(s.sitemapXml ?? ""), pages, statuses, coverage: { sitemapUrls: pages.length + 1, fetched: pages.length, complete },
   });
 
   it("finds an orphan among pages the main crawl never read", () => {
@@ -137,7 +139,7 @@ describe("with the sitemap crawl", () => {
     s.pages = [page("https://example.com/a", home(["/deep"]))];
     const deep = page("https://example.com/deep", home([]));
     const island = page("https://example.com/island", home([]));
-    s.siteCrawl = crawled([deep, island], [
+    s.siteCrawl = crawled(s, [deep, island], [
       { url: "https://example.com/deep", status: 200 }, { url: "https://example.com/island", status: 200 },
     ]);
     const f = runCrawlChecks(s).outcomes.find((o) => o.id === "orphan-pages")!.finding!;
@@ -147,7 +149,7 @@ describe("with the sitemap crawl", () => {
   it("does not call a page an orphan when only deeper pages that were fetched link to it", () => {
     const s = snap(home(["/a"]), { sitemapXml: sitemap("/", "/a", "/deep", "/deeper") });
     s.pages = [page("https://example.com/a", home(["/deep"]))];
-    s.siteCrawl = crawled(
+    s.siteCrawl = crawled(s, 
       [page("https://example.com/deep", home(["/deeper"])), page("https://example.com/deeper", home([]))],
       [{ url: "https://example.com/deep", status: 200 }, { url: "https://example.com/deeper", status: 200 }],
     );
@@ -156,7 +158,7 @@ describe("with the sitemap crawl", () => {
 
   it("says the orphan check could not be answered when the sitemap was only partly crawled", () => {
     const s = snap(home(["/a"]), { sitemapXml: sitemap("/", "/a", "/x") });
-    s.siteCrawl = crawled([], [], false);
+    s.siteCrawl = crawled(s, [], [], false);
     const r = runCrawlChecks(s);
     expect(r.outcomes.find((o) => o.id === "orphan-pages")).toBeUndefined();
     expect(r.insights.orphanCheck).toBe("incomplete");
@@ -165,7 +167,7 @@ describe("with the sitemap crawl", () => {
 
   it("counts the status of every sitemap page fetched, including unreachable ones", () => {
     const s = snap(home([]), { sitemapXml: sitemap("/", "/ok", "/gone", "/error", "/down") });
-    s.siteCrawl = crawled([page("https://example.com/ok", home([]))], [
+    s.siteCrawl = crawled(s, [page("https://example.com/ok", home([]))], [
       { url: "https://example.com/ok", status: 200 }, { url: "https://example.com/gone", status: 404 },
       { url: "https://example.com/error", status: 503 }, { url: "https://example.com/down", status: 0 },
     ]);
@@ -174,7 +176,7 @@ describe("with the sitemap crawl", () => {
 
   it("checks canonicals on the sitemap pages too", () => {
     const s = snap(home(["/a"], '<link rel="canonical" href="https://example.com/">'));
-    s.siteCrawl = crawled(
+    s.siteCrawl = crawled(s, 
       [page("https://example.com/deep", home([], '<link rel="canonical" href="https://example.com/">'))],
       [{ url: "https://example.com/deep", status: 200 }],
     );

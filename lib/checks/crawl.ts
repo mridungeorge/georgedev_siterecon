@@ -3,7 +3,7 @@ import type { SiteSnapshot } from "@/lib/snapshot";
 import type { CheckOutcome, Finding } from "@/lib/pipeline/schemas";
 import { readJsonLd } from "./jsonld";
 import { clip } from "./helpers";
-import { sitemapLocations, type CrawlCoverage } from "@/lib/site-crawl";
+import { isSitemapIndex, sitemapLocations, type CrawlCoverage } from "@/lib/site-crawl";
 
 // Crawlability and rendering: how the pages the audit read fit together, and whether what a bot is
 // served matches what a browser shows. Rules only. The weights are published on /methodology.
@@ -96,7 +96,9 @@ export function runCrawlChecks(s: SiteSnapshot): { outcomes: CheckOutcome[]; ins
   // 2. Orphan pages: listed in the sitemap, linked from none of the pages read. It is only answered
   // when the link graph covers the whole sitemap: every listed page was read, or fetched by the
   // bounded sitemap crawl. Without that crawl, only a small sitemap on an uncapped crawl qualifies.
-  const locs = s.sitemapXml ? sitemapLocations(s.sitemapXml) : [];
+  // With the sitemap crawl, its list of pages is used (it follows an index into its child sitemaps).
+  // Without it, an index lists sitemaps and not pages, so there is nothing to compare.
+  const locs = s.siteCrawl ? s.siteCrawl.urls : s.sitemapXml && !isSitemapIndex(s.sitemapXml) ? sitemapLocations(s.sitemapXml) : [];
   const capped = s.pages.length >= CRAWL_CAP;
   const host = normalise(s.home.finalUrl)?.split("/")[0];
   const coverage = s.siteCrawl?.coverage ?? null;
