@@ -30,6 +30,8 @@ const RenderSchema = z.discriminatedUnion("status", [
     inpMs: z.number().int().min(0).optional(),
     hydrationErrors: z.number().int().min(0).optional(),
     lcpTag: z.string().max(20).optional(),
+    /** The page was measured with images, media, fonts and styles blocked, after the full render crashed. */
+    light: z.boolean().optional(),
   }),
   z.object({ status: z.literal("skipped"), reason: z.string() }),
 ]);

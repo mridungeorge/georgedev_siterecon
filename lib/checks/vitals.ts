@@ -11,12 +11,14 @@ type Inp = NonNullable<Vitals["inp"]>;
 const ratingOf = (ms: number): Inp["rating"] => (ms <= 200 ? "good" : ms <= 500 ? "needs improvement" : "poor");
 
 function labInp(rendered: Rendered): Inp | null {
+  if (rendered.light) return null;
   return rendered.inpMs && rendered.inpMs > 0 ? { ms: rendered.inpMs, rating: ratingOf(rendered.inpMs), source: "lab" } : null;
 }
 
 /** Vitals measured by the audit's own browser, or null when it reported no largest paint. */
 export function browserVitals(rendered: Rendered | undefined): Vitals | null {
-  if (!rendered || !rendered.lcpMs || rendered.lcpMs <= 0) return null;
+  // A page measured with its images and styles blocked has no meaningful paint or shift numbers.
+  if (!rendered || rendered.light || !rendered.lcpMs || rendered.lcpMs <= 0) return null;
   return {
     source: "browser",
     lcp: { ms: rendered.lcpMs, element: rendered.lcpTag ? `${rendered.lcpTag} element` : null, resource: null },

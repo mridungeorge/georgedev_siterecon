@@ -14,6 +14,13 @@ SERVICE_ROOT = Path(__file__).resolve().parent.parent
 
 # How many of each the browser saw after JavaScript ran, to compare with the HTML a bot is served.
 IDLE_WAIT_MS = 3_000
+LIGHT_TIMEOUT_MS = 20_000
+
+
+def _renderer_crashed(exc: BaseException) -> bool:
+    """True when the browser's page or process died, as opposed to a bad address or a refused request."""
+    text = f"{type(exc).__name__} {exc}".lower()
+    return "page crashed" in text or "targetclosed" in text or "target closed" in text or "browser has been closed" in text
 
 
 def WEBSOCKET_HANDLER(ws) -> None:  # noqa: N802 - a constant-like hook, named for how it is used
@@ -63,6 +70,10 @@ def keep_known(data: dict, result: dict) -> None:
     tag = data.get("lcpTag")
     if isinstance(tag, str) and tag in LCP_TAGS:
         result["lcpTag"] = tag
+    # Set when the page was measured with images, media, fonts and styles blocked, so its speed numbers
+    # describe a stripped page and must not be read as the real one.
+    if data.get("light") is True:
+        result["light"] = True
 
 
 def read_available_mb() -> int | None:
@@ -211,6 +222,19 @@ def make_scrapling_renderer(timeout_ms: int, resolver: Resolver) -> Callable[[st
     """
 
     def render(url: str) -> dict:
+        try:
+            return attempt(url, light=False, timeout=timeout_ms)
+        except Exception as exc:
+            if not _renderer_crashed(exc):
+                raise
+        # The page crashed the browser, usually because it is heavy and the container's memory is small.
+        # Try once more with images, media, fonts and styles blocked, for the shorter time that is left.
+        # What matters most (headings, links, structured data, hydration errors) does not need them.
+        result = attempt(url, light=True, timeout=min(timeout_ms, LIGHT_TIMEOUT_MS))
+        result["light"] = True
+        return result
+
+    def attempt(url: str, *, light: bool, timeout: int) -> dict:
         from scrapling.fetchers import DynamicFetcher  # imported late: it is heavy and only needed here
 
         lookup = cached_resolver(resolver)
@@ -281,7 +305,8 @@ def make_scrapling_renderer(timeout_ms: int, resolver: Resolver) -> Callable[[st
             url,
             headless=True,
             network_idle=False,  # measure() waits a bounded time for quiet instead of up to the full timeout
-            timeout=timeout_ms,
+            timeout=timeout,
+            disable_resources=light,
             retries=1,
             google_search=False,
             page_setup=setup,

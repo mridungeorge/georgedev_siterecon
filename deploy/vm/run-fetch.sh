@@ -30,10 +30,10 @@ docker run -d --name siterecon-fetch --restart no \
   --network "$NETWORK" \
   --dns 1.1.1.1 --dns 8.8.8.8 \
   -p 127.0.0.1:8787:8787 \
-  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m \
+  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=512m \
   --shm-size=256m \
   --cap-drop=ALL --security-opt no-new-privileges \
-  --pids-limit=256 --memory=700m --memory-swap=700m --cpus=1 \
+  --pids-limit=256 --memory=1200m --memory-swap=1200m --cpus=1 \
   --env HOME=/tmp \
   --env-file "$ENV_FILE" \
   "$IMAGE"
