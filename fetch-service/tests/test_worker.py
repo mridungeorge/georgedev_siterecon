@@ -243,3 +243,117 @@ class TestHydrationMatcher:
         from app.render import is_hydration_error
 
         assert is_hydration_error(kind, text) is False
+
+
+class TestCrashFallback:
+    """A heavy page can crash Chromium inside a small container. The worker then tries once more with
+    images, media, fonts and styles blocked, so the counts that matter (headings, links, structured
+    data, hydration errors) are still measured, and says it did so."""
+
+    class FakePage:
+        def __init__(self):
+            self.handlers = {}
+
+        def route(self, *a, **k): pass
+        def route_web_socket(self, *a, **k): pass
+        def add_init_script(self, *a, **k): pass
+        def on(self, *a, **k): pass
+        def wait_for_load_state(self, *a, **k): pass
+        def wait_for_timeout(self, *a, **k): pass
+        def set_viewport_size(self, *a, **k): pass
+
+        class keyboard:
+            @staticmethod
+            def press(*a, **k): pass
+
+        class mouse:
+            @staticmethod
+            def click(*a, **k): pass
+
+        def evaluate(self, expression):
+            if "__sr" in expression:
+                return {"lcp": 900, "lcpTag": "img", "cls": 0.02, "inp": 40}
+            if "innerText" in expression:
+                return 321
+            if "scrollWidth" in expression:
+                return False
+            if "'h1'" in expression:
+                return 1
+            if "a[href]" in expression:
+                return 12
+            if "ld+json" in expression:
+                return 2
+            if "document.title" in expression:
+                return 17
+            return 0
+
+    def install_fake(self, monkeypatch, outcomes):
+        import sys
+        import types
+
+        calls = []
+
+        class FakeFetcher:
+            @staticmethod
+            def fetch(url, **kwargs):
+                calls.append(kwargs)
+                outcome = outcomes[len(calls) - 1]
+                if isinstance(outcome, Exception):
+                    raise outcome
+                page = TestCrashFallback.FakePage()
+                kwargs["page_setup"](page)
+                kwargs["page_action"](page)
+
+        module = types.ModuleType("scrapling.fetchers")
+        module.DynamicFetcher = FakeFetcher
+        monkeypatch.setitem(sys.modules, "scrapling", types.ModuleType("scrapling"))
+        monkeypatch.setitem(sys.modules, "scrapling.fetchers", module)
+        return calls
+
+    def renderer(self):
+        from app.render import make_scrapling_renderer
+
+        return make_scrapling_renderer(30_000, lambda host, *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))])
+
+    def test_a_normal_page_is_rendered_once_in_full(self, monkeypatch):
+        calls = self.install_fake(monkeypatch, [None])
+        result = self.renderer()("https://acme.example/")
+        assert len(calls) == 1
+        assert calls[0].get("disable_resources", False) is False
+        assert "light" not in result
+        assert result["h1"] == 1 and result["links"] == 12 and result["jsonLd"] == 2
+
+    def test_a_page_crash_is_retried_once_with_resources_blocked_and_flagged(self, monkeypatch):
+        calls = self.install_fake(monkeypatch, [RuntimeError("TargetClosedError: Page.goto: Page crashed"), None])
+        result = self.renderer()("https://acme.example/")
+        assert len(calls) == 2
+        assert calls[1]["disable_resources"] is True
+        assert result["light"] is True
+        assert result["words"] == 321 and result["h1"] == 1
+
+    def test_the_retry_uses_a_shorter_time_limit(self, monkeypatch):
+        calls = self.install_fake(monkeypatch, [RuntimeError("Page crashed"), None])
+        self.renderer()("https://acme.example/")
+        assert calls[1]["timeout"] < calls[0]["timeout"]
+
+    def test_an_error_that_is_not_a_crash_is_not_retried(self, monkeypatch):
+        calls = self.install_fake(monkeypatch, [RuntimeError("net::ERR_NAME_NOT_RESOLVED")])
+        with pytest.raises(RuntimeError):
+            self.renderer()("https://acme.example/")
+        assert len(calls) == 1
+
+    def test_two_crashes_give_up(self, monkeypatch):
+        calls = self.install_fake(monkeypatch, [RuntimeError("Page crashed"), RuntimeError("Page crashed")])
+        with pytest.raises(RuntimeError):
+            self.renderer()("https://acme.example/")
+        assert len(calls) == 2
+
+    def test_the_light_flag_survives_the_worker_hand_off_and_nothing_else_unexpected_does(self):
+        from app.render import keep_known
+
+        out = {}
+        keep_known({"light": True, "words": 5, "evil": "x"}, out)
+        assert out == {"light": True}
+        out = {}
+        keep_known({"light": "yes"}, out)
+        assert out == {}

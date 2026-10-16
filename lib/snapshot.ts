@@ -22,6 +22,8 @@ export interface RenderedStructure {
   hydrationErrors?: number;
   /** The kind of element the largest paint was, from a fixed list. */
   lcpTag?: string;
+  /** Measured with images, media, fonts and styles blocked. Counts are real, speed numbers are not. */
+  light?: boolean;
 }
 
 export type PageFetcher = (url: string, signal?: AbortSignal) => Promise<SafeResponse>;

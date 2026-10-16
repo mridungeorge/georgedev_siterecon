@@ -2,7 +2,7 @@
 
 **Status of this guide.** Everything below is written and the shell scripts pass a syntax check, but none of it has been run against a real VM, the container image has not been built, and the GitHub workflows have never executed. Treat the first deploy as a test, do it in the order below, and stop at any failed check.
 
-The target is the same e2-micro VM that runs RepoRecon (1 GB RAM, shared CPU). SiteRecon is sized to share it: the web app is capped at 256 MB of heap and 320 MB in total, the fetch container at 700 MB, one scan runs at a time, and a browser only starts when 400 MB is free.
+The target is the same e2-micro VM that runs RepoRecon (1 GB RAM, shared CPU). SiteRecon is sized to share it: the web app is capped at 256 MB of heap and 320 MB in total, the fetch container at 1.2 GB (a heavy page crashed Chromium at 700 MB), one scan runs at a time, and a browser only starts when 400 MB is free.
 
 ## 0. Before you start
 

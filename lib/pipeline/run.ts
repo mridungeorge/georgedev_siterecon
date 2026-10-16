@@ -171,8 +171,15 @@ export async function runScan(target: URL, deps: RunDeps): Promise<Report> {
           ...(rendered.inpMs === undefined ? {} : { inpMs: rendered.inpMs }),
           ...(rendered.hydrationErrors === undefined ? {} : { hydrationErrors: rendered.hydrationErrors }),
           ...(rendered.lcpTag === undefined ? {} : { lcpTag: rendered.lcpTag }),
+          ...(rendered.light === true ? { light: true } : {}),
         };
-        emit({ event: "step-done", data: { step: "render", message: `A real browser saw ${rendered.words} words${rendered.mobileOverflow ? " and a page wider than a phone screen" : ""}` } });
+        if (rendered.light) {
+          extraCouldntCheck.push({
+            what: "Browser speed numbers",
+            why: "the page was too heavy for a full browser render, so it was measured with images, media and fonts blocked. Headings, links, structured data and hydration were checked, but timings are not shown because they would describe a stripped page",
+          });
+        }
+        emit({ event: "step-done", data: { step: "render", message: `A real browser saw ${rendered.words} words${rendered.mobileOverflow ? " and a page wider than a phone screen" : ""}${rendered.light ? " (images and media blocked, because the full page crashed the browser)" : ""}` } });
       } else {
         extraCouldntCheck.push({ what: "Browser rendering", why: rendered.reason });
         emit({ event: "step-done", data: { step: "render", message: `Skipped: ${rendered.reason}` } });

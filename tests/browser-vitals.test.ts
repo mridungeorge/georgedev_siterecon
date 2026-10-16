@@ -49,3 +49,14 @@ describe("mergeBrowserVitals", () => {
     expect(mergeBrowserVitals(null, undefined)).toBeNull();
   });
 });
+
+describe("a page measured in light mode", () => {
+  it("gives no vitals, because blocked images and styles make the timings meaningless", () => {
+    expect(browserVitals({ words: 300, mobileOverflow: false, lcpMs: 900, clsMilli: 10, inpMs: 40, lcpTag: "h1", light: true })).toBeNull();
+  });
+
+  it("does not add a lab INP to PageSpeed's numbers either", () => {
+    const psi: Vitals = { source: "pagespeed", lcp: { ms: 3000, element: null, resource: null }, cls: { value: 0, shifts: [] }, inp: null, blockers: [], heavyScripts: [] };
+    expect(mergeBrowserVitals(psi, { words: 300, mobileOverflow: false, inpMs: 40, light: true })!.inp).toBeNull();
+  });
+});
