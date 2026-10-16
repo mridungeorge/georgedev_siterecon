@@ -66,6 +66,15 @@ function FindingCard({ f, open }: { f: Finding; open?: boolean }) {
   );
 }
 
+/** One honest sentence about how much of the sitemap the crawl covered, and why when it was not all of it. */
+function coverageText(c: NonNullable<NonNullable<Report["insights"]>["crawl"]>["coverage"] & object): string {
+  const kids = c.childSitemaps;
+  const base = `${c.sitemapUrls} pages in the sitemap, ${c.fetched} fetched beyond the ones read first.`;
+  if (c.complete) return base;
+  if (kids && kids.read < kids.listed) return `${base} It lists ${kids.listed} child sitemaps and only ${kids.read} could be read, so counts cover only part of the site.`;
+  return `${base} The sitemap is larger than the crawl limit, so counts cover only part of it.`;
+}
+
 const GRADE_COLOR: Record<string, string> = { A: "text-live", B: "text-live", C: "text-ink", D: "text-orange-300", F: "text-alert" };
 
 /** One ready-to-paste file or snippet, with a copy button. The content comes from the audited site, so it is shown as text. */
@@ -463,7 +472,7 @@ export default function ReportView({ report, permalink = true }: { report: Repor
           </div>
           <p className="mt-2 text-xs leading-relaxed text-muted">
             {report.insights.crawl.coverage
-              ? `${report.insights.crawl.coverage.sitemapUrls} pages in the sitemap, ${report.insights.crawl.coverage.fetched} fetched beyond the ones read first.${report.insights.crawl.coverage.complete ? "" : " The sitemap is larger than the crawl limit, so counts cover only part of it."}`
+              ? coverageText(report.insights.crawl.coverage)
               : "Only the pages read first are counted."}
             {report.insights.crawl.orphanCheck === "incomplete" ? " Orphan pages were not checked, because that needs every sitemap page." : ""}
           </p>

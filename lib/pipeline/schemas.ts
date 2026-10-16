@@ -172,7 +172,12 @@ export const InsightsSchema = z.object({
   crawl: z.object({
     statusClasses: z.object({ ok: z.number(), redirected: z.number(), clientError: z.number(), serverError: z.number(), unreachable: z.number().default(0) }),
     sitemapUrls: z.number().nullable(),
-    coverage: z.object({ sitemapUrls: z.number(), fetched: z.number(), complete: z.boolean() }).nullable().default(null),
+    coverage: z.object({
+      sitemapUrls: z.number(),
+      fetched: z.number(),
+      complete: z.boolean(),
+      childSitemaps: z.object({ listed: z.number(), read: z.number() }).nullable().default(null),
+    }).nullable().default(null),
     orphanCheck: z.enum(["ran", "incomplete", "no-sitemap"]).default("no-sitemap"),
     renderDiff: z.array(z.object({ label: z.string(), raw: z.number(), rendered: z.number() })),
   }).nullable().default(null),

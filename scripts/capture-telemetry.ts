@@ -33,6 +33,7 @@ async function main() {
     telemetry: report.telemetry,
     modules: report.modules.map((m) => ({ module: m.module, score: m.score, status: m.status, findings: m.findings.length })),
     crawl: report.insights?.crawl ?? null,
+    crawlFindings: (report.modules.find((m) => m.module === "crawl")?.findings ?? []).map((f) => ({ id: f.id, title: f.title, evidence: f.evidence.slice(0, 4) })),
   };
   writeFileSync(out, JSON.stringify(sample, null, 2) + "\n");
   console.log(`wrote ${out}: overall ${report.overallScore}, AI readiness ${report.aiReadiness?.score ?? "n/a"}, ${report.telemetry?.totalMs} ms`);

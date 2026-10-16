@@ -142,7 +142,12 @@ export function reportToMarkdown(report: Report): string {
     out.push(
       "## Crawlability and rendering", "",
       `Pages checked: ${c.ok} OK, ${c.redirected} redirected, ${c.clientError} client errors, ${c.serverError} server errors, ${c.unreachable} unreachable.`,
-      cov ? `The sitemap lists ${cov.sitemapUrls} pages and ${cov.fetched} were fetched beyond the first read.${cov.complete ? "" : " The sitemap is larger than the crawl limit, so these counts cover part of it."}` : "",
+      cov
+        ? `The sitemap lists ${cov.sitemapUrls} pages and ${cov.fetched} were fetched beyond the first read.${
+            cov.complete ? "" : cov.childSitemaps && cov.childSitemaps.read < cov.childSitemaps.listed
+              ? ` It lists ${cov.childSitemaps.listed} child sitemaps and only ${cov.childSitemaps.read} could be read, so these counts cover part of the site.`
+              : " The sitemap is larger than the crawl limit, so these counts cover part of it."}`
+        : "",
       "",
     );
     if (ins.crawl.renderDiff.length > 0) {

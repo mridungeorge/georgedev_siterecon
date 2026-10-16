@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { crawlSitemapPages } from "@/lib/site-crawl";
+import { crawlSitemapPages, sitemapLocations } from "@/lib/site-crawl";
 import { page, snap } from "./helpers/snap";
 import type { SafeResponse } from "@/lib/safe-fetch";
 
@@ -27,7 +27,7 @@ describe("crawlSitemapPages", () => {
     const r = await crawlSitemapPages(s, f.fn);
     expect(f.calls.sort()).toEqual(["https://example.com/b", "https://example.com/c"]);
     expect(r.pages.map((p) => p.finalUrl).sort()).toEqual(["https://example.com/b", "https://example.com/c"]);
-    expect(r.coverage).toEqual({ sitemapUrls: 4, fetched: 2, complete: true });
+    expect(r.coverage).toEqual({ sitemapUrls: 4, fetched: 2, complete: true, childSitemaps: null });
   });
 
   it("stops at the limit and says the crawl is incomplete", async () => {
@@ -67,7 +67,7 @@ describe("crawlSitemapPages", () => {
     const f = fetcher({});
     const r = await crawlSitemapPages(snap(html()), f.fn);
     expect(f.calls).toEqual([]);
-    expect(r.coverage).toEqual({ sitemapUrls: 0, fetched: 0, complete: false });
+    expect(r.coverage).toEqual({ sitemapUrls: 0, fetched: 0, complete: false, childSitemaps: null });
   });
 
   it("stops when the scan is cancelled", async () => {
@@ -118,6 +118,46 @@ describe("sitemap indexes", () => {
     const s = snap(html(), { sitemapXml: index("/broken.xml") });
     const f = fetcher({});
     const r = await crawlSitemapPages(s, f.fn);
+    expect(r.coverage.complete).toBe(false);
+  });
+});
+
+describe("XML in sitemaps", () => {
+  it("decodes &amp; and the other XML entities in a location before it is fetched", () => {
+    const xml = `<urlset><url><loc>https://example.com/p.php?type=pages&amp;page=1</loc></url><url><loc>https://example.com/a?x=1&lt;2&gt;&quot;q&quot;&apos;s&apos;</loc></url></urlset>`;
+    expect(sitemapLocations(xml)).toEqual(["https://example.com/p.php?type=pages&page=1", "https://example.com/a?x=1<2>\"q\"'s'"]);
+  });
+
+  it("reads a location wrapped in CDATA", () => {
+    expect(sitemapLocations("<urlset><url><loc><![CDATA[https://example.com/a?b=1&c=2]]></loc></url></urlset>")).toEqual(["https://example.com/a?b=1&c=2"]);
+  });
+
+  it("asks for a child sitemap with a real ampersand, as a BigCommerce store needs", async () => {
+    const s = snap(html(), {
+      sitemapXml: `<sitemapindex><sitemap><loc>https://example.com/xmlsitemap.php?type=pages&amp;page=1</loc></sitemap></sitemapindex>`,
+    });
+    const f = fetcher({
+      "https://example.com/xmlsitemap.php?type=pages&page=1": { body: sitemap("/", "/about"), contentType: "application/xml" },
+      "https://example.com/about": {},
+    });
+    const r = await crawlSitemapPages(s, f.fn);
+    expect(f.calls[0]).toBe("https://example.com/xmlsitemap.php?type=pages&page=1");
+    expect(r.pages.map((p) => p.finalUrl)).toEqual(["https://example.com/about"]);
+    expect(r.coverage.childSitemaps).toEqual({ listed: 1, read: 1 });
+  });
+
+  it("keeps two pages that differ only in their query string apart", async () => {
+    const s = snap(html(), { sitemapXml: sitemap("/item.php?id=1", "/item.php?id=2") });
+    const f = fetcher({ "https://example.com/item.php?id=1": {}, "https://example.com/item.php?id=2": {} });
+    const r = await crawlSitemapPages(s, f.fn);
+    expect(r.pages).toHaveLength(2);
+  });
+
+  it("reports how many child sitemaps it could read", async () => {
+    const s = snap(html(), { sitemapXml: `<sitemapindex><sitemap><loc>https://example.com/a.xml</loc></sitemap><sitemap><loc>https://example.com/b.xml</loc></sitemap></sitemapindex>` });
+    const f = fetcher({ "https://example.com/a.xml": { body: sitemap("/x"), contentType: "application/xml" }, "https://example.com/x": {} });
+    const r = await crawlSitemapPages(s, f.fn);
+    expect(r.coverage.childSitemaps).toEqual({ listed: 2, read: 1 });
     expect(r.coverage.complete).toBe(false);
   });
 });
