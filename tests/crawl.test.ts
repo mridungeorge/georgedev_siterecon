@@ -131,7 +131,7 @@ describe("determinism", () => {
 describe("with the sitemap crawl", () => {
   // `urls` is what the sitemap crawl found listed, which is every location in the snapshot's sitemap.
   const crawled = (s: ReturnType<typeof snap>, pages: ReturnType<typeof page>[], statuses: { url: string; status: number }[], complete = true) => ({
-    urls: sitemapLocations(s.sitemapXml ?? ""), pages, statuses, coverage: { sitemapUrls: pages.length + 1, fetched: pages.length, complete },
+    urls: sitemapLocations(s.sitemapXml ?? ""), pages, statuses, coverage: { sitemapUrls: pages.length + 1, fetched: pages.length, complete, childSitemaps: null },
   });
 
   it("finds an orphan among pages the main crawl never read", () => {
@@ -162,7 +162,7 @@ describe("with the sitemap crawl", () => {
     const r = runCrawlChecks(s);
     expect(r.outcomes.find((o) => o.id === "orphan-pages")).toBeUndefined();
     expect(r.insights.orphanCheck).toBe("incomplete");
-    expect(r.insights.coverage).toEqual({ sitemapUrls: 1, fetched: 0, complete: false });
+    expect(r.insights.coverage).toEqual({ sitemapUrls: 1, fetched: 0, complete: false, childSitemaps: null });
   });
 
   it("counts the status of every sitemap page fetched, including unreachable ones", () => {
@@ -181,5 +181,19 @@ describe("with the sitemap crawl", () => {
       [{ url: "https://example.com/deep", status: 200 }],
     );
     expect(failed(runCrawlChecks(s))).toContain("canonical-consistency");
+  });
+});
+
+describe("finding wording", () => {
+  it("agrees the verb with a single page", () => {
+    const s = snap(home(["/a"], '<link rel="canonical" href="https://example.com/">'));
+    s.pages = [page("https://example.com/a", home([], '<link rel="canonical" href="https://example.com/">'))];
+    expect(runCrawlChecks(s).outcomes.find((o) => o.id === "canonical-consistency")!.finding!.title).toBe("1 page declares a canonical that is not the page itself");
+  });
+
+  it("says an address redirects, whether it came from a link or the sitemap", () => {
+    const s = snap(home(["/old"]));
+    s.pages = [page("https://example.com/old", home([]), { finalUrl: "https://example.com/new" })];
+    expect(runCrawlChecks(s).outcomes.find((o) => o.id === "internal-redirects")!.finding!.title).toBe("1 address redirects to another page");
   });
 });

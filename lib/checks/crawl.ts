@@ -85,7 +85,7 @@ export function runCrawlChecks(s: SiteSnapshot): { outcomes: CheckOutcome[]; ins
   if ([...s.pages, ...extra].some((r) => cheerio.load(r.body)('link[rel="canonical" i]').length > 0)) {
     record("canonical-consistency", canonicalProblems.length === 0, () =>
       finding("canonical-consistency", "high", "low", {
-        title: `${canonicalProblems.length} page${canonicalProblems.length === 1 ? "" : "s"} declare a canonical that is not the page itself`,
+        title: `${canonicalProblems.length} page${canonicalProblems.length === 1 ? " declares" : "s declare"} a canonical that is not the page itself`,
         detail: "A canonical tells search engines which address is the real one. An inner page that points elsewhere (especially at the homepage) can be dropped from the index as a duplicate.",
         fix: "Make each page's canonical its own address. Only point a canonical elsewhere for a true duplicate, such as a tracking-parameter variant.",
         evidence: canonicalProblems.slice(0, 4),
@@ -140,9 +140,9 @@ export function runCrawlChecks(s: SiteSnapshot): { outcomes: CheckOutcome[]; ins
   if (s.pages.length + extra.length > 0) {
     record("internal-redirects", redirected.length === 0, () =>
       finding("internal-redirects", "low", "low", {
-        title: `${redirected.length} internal link${redirected.length === 1 ? "" : "s"} go through a redirect`,
-        detail: "Each redirected link costs a request before the real page loads, for visitors and for crawlers.",
-        fix: "Update the links to point straight at the final address.",
+        title: `${redirected.length} address${redirected.length === 1 ? " redirects" : "es redirect"} to another page`,
+        detail: "These addresses come from the site's own links or its sitemap, and each one costs a request before the real page loads, for visitors and for crawlers. A redirecting address in the sitemap also wastes crawl budget and is a sign the sitemap is stale.",
+        fix: "Point the links, and the sitemap entries, straight at the final address.",
         evidence: redirected.slice(0, 5).map((p) => ({ url: p.url, note: `redirects to ${clip(p.finalUrl, 120)}` })),
       }),
     );

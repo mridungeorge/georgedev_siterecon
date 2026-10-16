@@ -17,6 +17,8 @@ export interface CrawlCoverage {
   fetched: number;
   /** True when every listed page was either read before or fetched now. */
   complete: boolean;
+  /** For a sitemap index: how many child sitemaps it lists and how many could be read. Null for a plain sitemap. */
+  childSitemaps: { listed: number; read: number } | null;
 }
 
 export interface SitemapCrawl {
@@ -31,14 +33,21 @@ export interface SitemapCrawl {
 const key = (raw: string): string | null => {
   try {
     const u = new URL(raw);
-    return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "") || "/"}`;
+    // The query string is part of the identity: a store may serve many pages from one script.
+    return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "") || "/"}${u.search}`;
   } catch {
     return null;
   }
 };
 
+/** The five entities XML defines. A sitemap writes a query string as ?a=1&amp;b=2, and must be read back as ?a=1&b=2. */
+const decodeXml = (s: string): string =>
+  s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+
 export function sitemapLocations(xml: string): string[] {
-  return [...xml.matchAll(/<loc>\s*([^<\s][^<]*?)\s*<\/loc>/gi)].map((m) => m[1]!);
+  return [...xml.matchAll(/<loc>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<\s][^<]*?))\s*<\/loc>/gi)].map((m) =>
+    m[1] !== undefined ? m[1].trim() : decodeXml(m[2]!),
+  );
 }
 
 /** True for a sitemap index: a list of other sitemaps, not of pages. */
@@ -50,7 +59,7 @@ export async function crawlSitemapPages(
   opts: { limit?: number; concurrency?: number; maxChildSitemaps?: number; signal?: AbortSignal } = {},
 ): Promise<SitemapCrawl> {
   const { limit = 40, concurrency = 4, maxChildSitemaps = 5, signal } = opts;
-  const empty: SitemapCrawl = { urls: [], pages: [], statuses: [], coverage: { sitemapUrls: 0, fetched: 0, complete: false } };
+  const empty: SitemapCrawl = { urls: [], pages: [], statuses: [], coverage: { sitemapUrls: 0, fetched: 0, complete: false, childSitemaps: null } };
   if (!s.sitemapXml) return empty;
 
   const home = key(s.home.finalUrl)?.split("/")[0];
@@ -60,6 +69,7 @@ export async function crawlSitemapPages(
   // were more than that or one could not be read, because the page list is then partial.
   let locations = sitemapLocations(s.sitemapXml);
   let childrenIncomplete = false;
+  let childSitemaps: SitemapCrawl["coverage"]["childSitemaps"] = null;
   if (isSitemapIndex(s.sitemapXml)) {
     const children = locations.filter((loc) => {
       try {
@@ -70,18 +80,23 @@ export async function crawlSitemapPages(
       }
     });
     childrenIncomplete = children.length > maxChildSitemaps || children.length < locations.length;
+    const listed = locations.length;
+    let read = 0;
     locations = [];
     for (const child of children.slice(0, maxChildSitemaps)) {
       if (signal?.aborted) throw new Error("The scan was cancelled.");
       try {
         const res = await fetchPage(child, signal);
-        if (res.status === 200 && /<(urlset|sitemapindex)[\s>]/i.test(res.body) && !isSitemapIndex(res.body)) locations.push(...sitemapLocations(res.body));
-        else childrenIncomplete = true;
+        if (res.status === 200 && /<(urlset|sitemapindex)[\s>]/i.test(res.body) && !isSitemapIndex(res.body)) {
+          locations.push(...sitemapLocations(res.body));
+          read += 1;
+        } else childrenIncomplete = true;
       } catch {
         if (signal?.aborted) throw new Error("The scan was cancelled.");
         childrenIncomplete = true;
       }
     }
+    childSitemaps = { listed, read };
   }
 
   const seen = new Set<string>();
@@ -127,6 +142,6 @@ export async function crawlSitemapPages(
     urls: onSite,
     pages,
     statuses,
-    coverage: { sitemapUrls: onSite.length, fetched: batch.length, complete: todo.length <= limit && !childrenIncomplete },
+    coverage: { sitemapUrls: onSite.length, fetched: batch.length, complete: todo.length <= limit && !childrenIncomplete, childSitemaps },
   };
 }
