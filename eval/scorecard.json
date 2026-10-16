@@ -7,6 +7,6 @@
   "evidenceValid": true,
   "deterministic": true,
   "failures": [],
-  "ranOn": "2026-10-15",
+  "ranOn": "2026-10-16",
   "recallFloor": 0.95
 }

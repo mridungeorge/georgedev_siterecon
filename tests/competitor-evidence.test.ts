@@ -56,7 +56,7 @@ describe("competitor evidence", () => {
 
 describe("entities and sitemap size", () => {
   it("names the entities most competitors mention that the site does not", () => {
-    const gaps = computeGaps({ ...site, entities: ["sunrise bakery", "melbourne"] }, [
+    const gaps = computeGaps({ ...site, entities: ["sunrise bakery", "melbourne", "joseph joseph"] }, [
       row("a.example", { entities: ["melbourne", "stoneground flour", "sourdough society"] }),
       row("b.example", { entities: ["stoneground flour", "sourdough society"] }),
     ]);
@@ -67,8 +67,8 @@ describe("entities and sitemap size", () => {
   });
 
   it("reports how many of the site's entities competitors also name", () => {
-    const gaps = computeGaps({ ...site, entities: ["melbourne", "sunrise bakery"] }, [row("a.example", { entities: ["melbourne"] })]);
-    expect(gaps.join(" ")).toMatch(/1 of 2 of the places, brands and names you mention also appear/);
+    const gaps = computeGaps({ ...site, entities: ["melbourne", "sunrise bakery", "joseph joseph"] }, [row("a.example", { entities: ["melbourne"] })]);
+    expect(gaps.join(" ")).toMatch(/1 of 3 of the places, brands and names you mention also appear/);
   });
 
   it("compares how many pages competitors list in their sitemaps", () => {
@@ -79,5 +79,24 @@ describe("entities and sitemap size", () => {
   it("says nothing about size when the site is comparable or has no sitemap", () => {
     expect(computeGaps({ ...site, sitemapUrls: 70 }, [row("a.example", { sitemapUrls: 90 })]).join(" ")).not.toMatch(/sitemaps/);
     expect(computeGaps({ ...site, sitemapUrls: 0 }, [row("a.example", { sitemapUrls: 90 })]).join(" ")).not.toMatch(/sitemaps/);
+  });
+});
+
+describe("entitiesOf", () => {
+  it("finds names that are capitalised in the middle of a sentence, and ignores sentence starters and headings", async () => {
+    const { entitiesOf } = await import("@/lib/competitors");
+    const found = entitiesOf([
+      "Make laundry day simple. We work with Joseph Joseph and Brabantia, and ship from Melbourne to Sydney.",
+      "Take the stress out of storage. Stackers Australia is a family company.",
+    ]);
+    expect(found).toEqual(expect.arrayContaining(["joseph joseph", "brabantia", "melbourne", "sydney", "stackers australia"]));
+    expect(found).not.toContain("make");
+    expect(found).not.toContain("take");
+    expect(found).not.toContain("we");
+  });
+
+  it("returns nothing for plain lower-case copy", async () => {
+    const { entitiesOf } = await import("@/lib/competitors");
+    expect(entitiesOf(["we sell storage for the home and ship it fast"])).toEqual([]);
   });
 });

@@ -80,7 +80,8 @@ function readVitals(url: string, audits: Audits | undefined, data: unknown, lcpM
     .slice(0, 5);
   const heavyScripts = itemsOf(audits?.["bootup-time"])
     .map((i) => asRecord(i))
-    .filter((r): r is Record<string, unknown> => r !== null && typeof r.url === "string" && typeof r.total === "number")
+    // "Unattributable" and other labels are not addresses, and a finding's evidence must point at one.
+    .filter((r): r is Record<string, unknown> => r !== null && typeof r.url === "string" && /^https?:\/\//i.test(r.url) && typeof r.total === "number")
     .sort((a, b) => (b.total as number) - (a.total as number))
     .slice(0, 3)
     .map((r) => ({ url: str(r.url, 300), ms: Math.round(r.total as number) }));

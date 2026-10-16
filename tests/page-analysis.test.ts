@@ -82,3 +82,21 @@ describe("schemaGaps", () => {
     expect(schemaGaps(snap(`<body><h1>About us</h1><p>${words(120)}</p></body>`))).toEqual([]);
   });
 });
+
+describe("schemaGaps on listing pages", () => {
+  const card = (n: number) => `<article class="card"><h3>Item ${n}</h3><span>$${10 + n}.00</span><button>Add to cart</button></article>`;
+
+  it("does not call a product listing a single product", () => {
+    const html = `<head><meta name="description" content="Shop the sale."></head><body><h1>SALE</h1>${[1, 2, 3, 4, 5, 6, 7, 8].map(card).join("")}</body>`;
+    const s = snap("<body><p>home</p></body>");
+    s.pages = [page("https://example.com/sale/", html)];
+    expect(schemaGaps(s).filter((g) => g.type === "Product")).toEqual([]);
+  });
+
+  it("still finds a real product page with one price and one buy button", () => {
+    const html = `<head><meta name="description" content="A sturdy oak shelf."></head><body><h1>Oak Shelf</h1><p>$120.00</p><p>Was $150.00</p><button>Add to cart</button></body>`;
+    const s = snap("<body><p>home</p></body>");
+    s.pages = [page("https://example.com/products/oak-shelf", html)];
+    expect(schemaGaps(s).map((g) => g.type)).toEqual(["Product"]);
+  });
+});

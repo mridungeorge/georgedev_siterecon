@@ -78,3 +78,46 @@ describe("crawlSitemapPages", () => {
     await expect(crawlSitemapPages(s, fn, { signal: controller.signal, concurrency: 1 })).rejects.toThrow(/cancel/i);
   });
 });
+
+describe("sitemap indexes", () => {
+  const index = (...children: string[]) =>
+    `<?xml version="1.0"?><sitemapindex>${children.map((c) => `<sitemap><loc>https://example.com${c}</loc></sitemap>`).join("")}</sitemapindex>`;
+
+  it("follows the child sitemaps of an index and crawls the pages they list", async () => {
+    const s = snap(html(["/a"]), { sitemapXml: index("/sitemap-pages.xml", "/sitemap-products.xml") });
+    const f = fetcher({
+      "https://example.com/sitemap-pages.xml": { body: sitemap("/", "/about"), contentType: "application/xml" },
+      "https://example.com/sitemap-products.xml": { body: sitemap("/p1"), contentType: "application/xml" },
+      "https://example.com/about": {}, "https://example.com/p1": {},
+    });
+    const r = await crawlSitemapPages(s, f.fn);
+    expect(f.calls.sort()).toEqual([
+      "https://example.com/about", "https://example.com/p1", "https://example.com/sitemap-pages.xml", "https://example.com/sitemap-products.xml",
+    ]);
+    expect(r.pages.map((p) => p.finalUrl).sort()).toEqual(["https://example.com/about", "https://example.com/p1"]);
+    expect(r.coverage.complete).toBe(true);
+  });
+
+  it("says the crawl is incomplete when the index has more child sitemaps than it will read", async () => {
+    const kids = Array.from({ length: 8 }, (_, i) => `/s${i}.xml`);
+    const s = snap(html(), { sitemapXml: index(...kids) });
+    const f = fetcher(Object.fromEntries(kids.map((k) => [`https://example.com${k}`, { body: sitemap("/x"), contentType: "application/xml" }])));
+    const r = await crawlSitemapPages(s, f.fn, { maxChildSitemaps: 3 });
+    expect(f.calls.filter((c) => c.endsWith(".xml"))).toHaveLength(3);
+    expect(r.coverage.complete).toBe(false);
+  });
+
+  it("does not read a child sitemap on another host", async () => {
+    const s = snap(html(), { sitemapXml: `<sitemapindex><sitemap><loc>https://elsewhere.test/s.xml</loc></sitemap></sitemapindex>` });
+    const f = fetcher({});
+    await crawlSitemapPages(s, f.fn);
+    expect(f.calls).toEqual([]);
+  });
+
+  it("counts a child sitemap that cannot be read as an incomplete crawl", async () => {
+    const s = snap(html(), { sitemapXml: index("/broken.xml") });
+    const f = fetcher({});
+    const r = await crawlSitemapPages(s, f.fn);
+    expect(r.coverage.complete).toBe(false);
+  });
+});

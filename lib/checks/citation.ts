@@ -113,7 +113,11 @@ function evaluate(a: PageAnalysis, entity: string | null, isHome: boolean, fit: 
     states.definition = says ? "pass" : "fail";
   } else states.definition = "n/a";
 
-  if (judge) {
+  // Words in real paragraphs. A product grid or a menu has many words and almost no prose, so it is
+  // judged on neither passage length nor structure: there is no essay to restructure.
+  const proseWords = a.paragraphs.reduce((n, p) => n + wordCount(p), 0);
+  const hasProse = proseWords >= MIN_WORDS_TO_JUDGE;
+  if (judge && hasProse) {
     const lengths = a.paragraphs.map(wordCount);
     states["answer-passage"] = lengths.some((n) => n >= IDEAL_MIN && n <= IDEAL_MAX) ? "pass" : lengths.some((n) => n >= QUOTABLE_MIN && n <= QUOTABLE_MAX) ? "partial" : "fail";
     // Figures are about the business itself, so only the homepage is held to them.
@@ -125,7 +129,7 @@ function evaluate(a: PageAnalysis, entity: string | null, isHome: boolean, fit: 
 
   const long = a.paragraphs.filter((p) => wordCount(p) > QUOTABLE_MAX);
   const sections = a.headings.filter((h) => h.level === 2 || h.level === 3).length;
-  states.structure = judge ? (long.length > 0 || (a.words >= 600 && sections < 2) ? "fail" : "pass") : "n/a";
+  states.structure = judge && hasProse ? (long.length > 0 || (proseWords >= 400 && sections < 2) ? "fail" : "pass") : "n/a";
 
   if (judge) {
     states.clarity = vagueTermCount(a.paragraphs) >= 3 || undefinedAcronyms(a.paragraphs.join(" ")).length >= 2 ? "fail" : "pass";
@@ -133,7 +137,9 @@ function evaluate(a: PageAnalysis, entity: string | null, isHome: boolean, fit: 
 
   states["schema-fit"] = fit.detected.length === 0 ? "n/a" : fit.gaps.length === 0 ? "pass" : "fail";
   // Citing sources is expected of articles and guides, not of a shop front or a contact page.
-  const articleLike = /<article[\s>]/i.test(a.html) || a.schemaTypes.some((t) => /Article|BlogPosting/.test(t));
+  // Product cards are often <article> elements too, so one or two of them is an article and forty is a grid.
+  const articleTags = (a.html.match(/<article[\s>]/gi) ?? []).length;
+  const articleLike = (articleTags >= 1 && articleTags <= 2) || a.schemaTypes.some((t) => /Article|BlogPosting/.test(t));
   states.authority = a.words >= 300 && articleLike ? (a.externalDomains.length >= 2 ? "pass" : "fail") : "n/a";
 
   return { a, states, gapTypes: fit.gaps.map((g) => g.type), longParagraphs: long };
