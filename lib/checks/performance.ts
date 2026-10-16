@@ -82,6 +82,8 @@ function readVitals(url: string, audits: Audits | undefined, data: unknown, lcpM
     .map((i) => asRecord(i))
     // "Unattributable" and other labels are not addresses, and a finding's evidence must point at one.
     .filter((r): r is Record<string, unknown> => r !== null && typeof r.url === "string" && /^https?:\/\//i.test(r.url) && typeof r.total === "number")
+    // The page's own document is not a script file; its time is parsing and inline code, which has no file to fix.
+    .filter((r) => !samePage(r.url as string, url))
     .sort((a, b) => (b.total as number) - (a.total as number))
     .slice(0, 3)
     .map((r) => ({ url: str(r.url, 300), ms: Math.round(r.total as number) }));
@@ -95,6 +97,15 @@ function readVitals(url: string, audits: Audits | undefined, data: unknown, lcpM
     blockers,
     heavyScripts,
   };
+}
+
+function samePage(a: string, b: string): boolean {
+  try {
+    const x = new URL(a), y = new URL(b);
+    return x.origin === y.origin && x.pathname.replace(/\/+$/, "") === y.pathname.replace(/\/+$/, "") && x.search === y.search;
+  } catch {
+    return false;
+  }
 }
 
 const SOURCE = "PageSpeed Insights";
